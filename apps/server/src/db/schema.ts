@@ -336,3 +336,10 @@ export const templates = pgTable('templates', {
 	html: text('html').notNull(),
 	createdAt: createdAt(),
 })
+
+/** Instance-wide settings (branding, ...), one JSON value per key. */
+export const appSettings = pgTable('app_settings', {
+	key: text('key').primaryKey(),
+	value: jsonb('value').notNull(),
+	updatedAt: ts('updated_at').notNull().defaultNow(),
+})

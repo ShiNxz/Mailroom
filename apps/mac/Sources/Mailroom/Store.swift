@@ -57,6 +57,8 @@ final class AppStore {
 	var outbox: [OutboxItem] = []
 	var templates: [Template] = []
 
+	var branding = Branding.standard
+
 	// UI
 	var drafts: [UUID: ComposeDraft] = [:]
 	var banner: Banner?
@@ -74,8 +76,8 @@ final class AppStore {
 	func start() async {
 		// Dev hook: MAILROOM_SERVER + MAILROOM_TOKEN skip the keychain (used to test against a local server)
 		let env = ProcessInfo.processInfo.environment
-		if let s = env["MAILROOM_SERVER"], let t = env["MAILROOM_TOKEN"] {
-			server = s
+		if let s = env["MAILROOM_SERVER"] { server = s }
+		if env["MAILROOM_SERVER"] != nil, let t = env["MAILROOM_TOKEN"] {
 			token = t
 		} else {
 			token = Keychain.read("token:\(API.normalize(server))")
@@ -143,13 +145,20 @@ final class AppStore {
 		async let a: Void = refreshBoot()
 		async let b: Void = reloadThreads()
 		async let c: Void = loadTemplates()
-		_ = await (a, b, c)
+		async let d: Void = loadBranding()
+		_ = await (a, b, c, d)
 		if ProcessInfo.processInfo.environment["MAILROOM_OPEN_FIRST"] != nil, let first = threads.first {
 			selectedThreadId = first.threadId
 		}
 	}
 
 	// MARK: Data
+
+	/// Public, so the sign-in screen can show it before there is a session
+	func loadBranding(server: String? = nil) async {
+		let target = API(server: server ?? self.server, token: nil)
+		if let b = try? await target.get("/branding", as: Branding.self) { branding = b } else if server != nil { branding = .standard }
+	}
 
 	func refreshBoot() async {
 		guard phase == .signedIn else { return }
@@ -545,6 +554,8 @@ final class AppStore {
 					UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: m.messageId, content: content, trigger: nil))
 				}
 			}
+		case "branding":
+			Task { await loadBranding() }
 		case "outbox":
 			if event.status == "failed" { show(Banner(text: "A message could not be sent: \(event.error ?? "")", isError: true)) }
 			if selection == .scheduled { Task { await loadOutbox() } }

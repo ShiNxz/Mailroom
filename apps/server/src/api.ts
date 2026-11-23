@@ -8,6 +8,7 @@ import { HttpError } from './lib/http'
 import { log } from './lib/log'
 import { adminRoutes } from './routes/admin'
 import { authRoutes } from './routes/auth'
+import { brandingRoutes } from './routes/branding'
 import { composeRoutes } from './routes/compose'
 import { eventRoutes } from './routes/events'
 import { mailRoutes } from './routes/mail'
@@ -40,6 +41,7 @@ const app = new Elysia()
 	})
 	.get('/health', () => ({ ok: true }))
 	.use(authRoutes)
+	.use(brandingRoutes)
 	.use(adminRoutes)
 	.use(mailRoutes)
 	.use(composeRoutes)

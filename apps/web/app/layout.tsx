@@ -1,3 +1,4 @@
+import { type Branding, DEFAULT_BRANDING } from '@mailroom/shared'
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import type { ReactNode } from 'react'
@@ -6,10 +7,21 @@ import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
-export const metadata: Metadata = {
-	title: 'Mailroom',
-	description: 'Mail for every project',
-	robots: { index: false, follow: false },
+const API_URL = (process.env.API_URL ?? 'http://localhost:3001').replace(/\/$/, '')
+
+// The tab title and icon come from the branding (Settings), so they are right before any script runs
+export async function generateMetadata(): Promise<Metadata> {
+	let branding: Branding = DEFAULT_BRANDING
+	try {
+		const res = await fetch(`${API_URL}/branding`, { next: { revalidate: 30 }, signal: AbortSignal.timeout(2000) })
+		if (res.ok) branding = await res.json()
+	} catch {}
+	return {
+		title: branding.name,
+		description: 'Mail for every project',
+		robots: { index: false, follow: false },
+		...(branding.logoUrl ? { icons: { icon: branding.logoUrl, apple: branding.logoUrl } } : {}),
+	}
 }
 
 export const viewport: Viewport = {

@@ -303,6 +303,15 @@ export type ServerEvent =
 	| { type: 'folders'; mailboxId: string }
 	| { type: 'outbox'; mailboxId: string; id: string; status: OutboxStatus; error: string | null }
 	| { type: 'access' }
+	| { type: 'branding' }
+
+/** How the app names and shows itself. Set by admins in Settings; logoUrl null shows the default mark. */
+export interface Branding {
+	name: string
+	logoUrl: string | null
+}
+
+export const DEFAULT_BRANDING: Branding = { name: 'Mailroom', logoUrl: null }
 
 export const formatAddress = (a: Address) => (a.name ? `${a.name} <${a.address}>` : a.address)
 

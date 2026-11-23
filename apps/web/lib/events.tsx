@@ -60,6 +60,9 @@ export function useServerEvents(opts: { notifications: boolean }) {
 				case 'access':
 					soon('boot')
 					break
+				case 'branding':
+					void mutate('/branding')
+					break
 				case 'outbox':
 					void mutate(key => typeof key === 'string' && key.startsWith('/outbox'))
 					soon('boot')

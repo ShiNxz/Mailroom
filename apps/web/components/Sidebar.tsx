@@ -11,7 +11,6 @@ import {
 	Folder as FolderIcon,
 	Inbox,
 	LogOut,
-	Mail,
 	Moon,
 	PenSquare,
 	Plus,
@@ -28,6 +27,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { type ReactNode, useEffect, useState } from 'react'
 import { api, useBootstrap, useMe } from '@/lib/api'
+import { BrandMark, useBranding } from './Brand'
 import { useCompose } from './compose/context'
 import { SectionTitle, StatusDot, STATUS_LABEL } from './ui'
 
@@ -217,6 +217,7 @@ export function toggleTheme() {
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 	const { data: boot } = useBootstrap()
 	const { data: me } = useMe()
+	const branding = useBranding()
 	const { open } = useCompose()
 	const params = useSearchParams()
 	const pathname = usePathname()
@@ -239,10 +240,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 			onClickCapture={e => (e.target as HTMLElement).closest('a') && onNavigate?.()}
 		>
 			<div className="flex h-14 shrink-0 items-center gap-2 px-4">
-				<div className="flex size-7 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-					<Mail className="size-4" />
-				</div>
-				<span className="flex-1 font-semibold tracking-tight">Mailroom</span>
+				<BrandMark branding={branding} />
+				<span className="min-w-0 flex-1 truncate font-semibold tracking-tight">{branding.name}</span>
 				<button
 					type="button"
 					aria-label="Toggle theme"

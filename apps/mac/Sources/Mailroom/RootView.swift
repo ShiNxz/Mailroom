@@ -83,9 +83,9 @@ struct LoginView: View {
 
 	var body: some View {
 		VStack(spacing: 18) {
-			AppMark(size: 56)
+			BrandLogo(branding: store.branding, size: 56)
 			VStack(spacing: 4) {
-				Text("Sign in to Mailroom").font(.title2.weight(.semibold))
+				Text("Sign in to \(store.branding.name)").font(.title2.weight(.semibold))
 				Text("Use the same account as the web app.").foregroundStyle(.secondary)
 			}
 			Form {
@@ -113,6 +113,12 @@ struct LoginView: View {
 		}
 		.padding(40)
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
+		// Show the server's branding as soon as its address is in
+		.task(id: server) {
+			try? await Task.sleep(for: .milliseconds(400))
+			guard !Task.isCancelled, server.contains(".") || server.contains("localhost") else { return }
+			await store.loadBranding(server: server)
+		}
 	}
 
 	private func signIn() {
@@ -125,6 +131,30 @@ struct LoginView: View {
 				self.error = error.localizedDescription
 			}
 			busy = false
+		}
+	}
+}
+
+/// The instance logo, or the app mark when there is none or it doesn't load
+struct BrandLogo: View {
+	let branding: Branding
+	var size: CGFloat = 28
+
+	var body: some View {
+		if let raw = branding.logoUrl, let url = URL(string: raw) {
+			AsyncImage(url: url) { phase in
+				if let image = phase.image {
+					image.resizable().scaledToFit()
+				} else if phase.error != nil {
+					AppMark(size: size)
+				} else {
+					ProgressView().controlSize(.small)
+				}
+			}
+			.frame(width: size, height: size)
+			.clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+		} else {
+			AppMark(size: size)
 		}
 	}
 }

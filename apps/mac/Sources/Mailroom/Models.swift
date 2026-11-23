@@ -181,6 +181,14 @@ struct Contact: Codable, Hashable {
 	let address: String
 }
 
+/// The instance's name and logo, set by an admin in the web app's Settings
+struct Branding: Codable, Hashable {
+	var name: String
+	var logoUrl: String?
+
+	static let standard = Branding(name: "Mailroom", logoUrl: nil)
+}
+
 /// Server-sent event from /api/events
 struct ServerEvent: Decodable {
 	struct NewMail: Decodable {

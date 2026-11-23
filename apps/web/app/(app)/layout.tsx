@@ -3,6 +3,7 @@
 import { Menu } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { type ReactNode, Suspense, useEffect, useState } from 'react'
+import { useBranding, useBrandingInDocument } from '@/components/Brand'
 import { ComposerHost } from '@/components/compose/Composer'
 import { ComposeProvider, useCompose } from '@/components/compose/context'
 import { Sidebar } from '@/components/Sidebar'
@@ -39,6 +40,7 @@ function Shell({ children }: { children: ReactNode }) {
 	const pathname = usePathname()
 	const [navOpen, setNavOpen] = useState(false)
 	useServerEvents({ notifications: me?.user.settings.notifications ?? false })
+	useBrandingInDocument(useBranding())
 
 	useEffect(() => {
 		if (error) router.replace(`/login?next=${encodeURIComponent(pathname)}`)

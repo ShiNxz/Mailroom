@@ -1,14 +1,16 @@
 'use client'
 
 import { Alert, Button, Card, Input, Label, TextField } from '@heroui/react'
-import { Mail } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type FormEvent, Suspense, useEffect, useState } from 'react'
+import { BrandMark, useBranding, useBrandingInDocument } from '@/components/Brand'
 import { api } from '@/lib/api'
 
 function LoginForm() {
 	const router = useRouter()
 	const params = useSearchParams()
+	const branding = useBranding()
+	useBrandingInDocument(branding, 'Sign in')
 	const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
 	const [tokenRequired, setTokenRequired] = useState(false)
 	const [token, setToken] = useState('')
@@ -47,10 +49,10 @@ function LoginForm() {
 		<main className="flex min-h-dvh items-center justify-center bg-background p-4">
 			<Card className="w-full max-w-sm">
 				<Card.Header className="items-center gap-3 text-center">
-					<div className="flex size-11 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
-						<Mail className="size-5" />
-					</div>
-					<Card.Title className="text-xl">{needsSetup ? 'Set up Mailroom' : 'Sign in to Mailroom'}</Card.Title>
+					<BrandMark branding={branding} size={44} />
+					<Card.Title className="text-xl">
+						{needsSetup ? `Set up ${branding.name}` : `Sign in to ${branding.name}`}
+					</Card.Title>
 					<Card.Description>
 						{needsSetup
 							? 'Create the owner account. You can add people later.'

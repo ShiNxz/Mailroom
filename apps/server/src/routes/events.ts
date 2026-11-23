@@ -35,6 +35,10 @@ export const eventRoutes = new Elysia().use(authed).get('/events', async ({ user
 				}
 			}
 			const listener: Listener = event => {
+				if (event.type === 'branding') {
+					send(`data: ${JSON.stringify(event)}\n\n`)
+					return
+				}
 				if (event.type === 'access') {
 					void accessibleMailboxIds(user).then(ids => {
 						allowed = new Set(ids)
