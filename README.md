@@ -95,3 +95,7 @@ Shortcuts: ⌘N new message, ⌘R reply, ⇧⌘R reply all, ⇧⌘F forward, ⌘
 ## Gmail and Microsoft 365
 
 Gmail works with an app password (IMAP on). Microsoft 365 mostly blocks password sign-in for IMAP/SMTP, so it only works where the tenant allows it. OAuth for both is not built yet.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
