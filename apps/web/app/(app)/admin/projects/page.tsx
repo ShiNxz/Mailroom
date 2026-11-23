@@ -3,7 +3,7 @@
 import type { Domain, Project, UserWithAccess } from '@mailroom/shared'
 import { Button, Card, Chip, Description, Input, Label, Modal, TextField } from '@heroui/react'
 import { formatDistanceToNow } from 'date-fns'
-import { Globe, MailPlus, Pause, Pencil, Play, Plus, RefreshCw, Trash2, Users } from 'lucide-react'
+import { Check, Globe, MailPlus, Pause, Pencil, Play, Plus, RefreshCw, Trash2, Users } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
@@ -81,16 +81,24 @@ function ProjectForm({
 						)}
 						<div className="flex flex-col gap-2">
 							<span className="text-sm font-medium">Color</span>
-							<div className="flex gap-2">
+							{/* Padding leaves room for the selection outline, which the dialog body would clip */}
+							<div className="flex flex-wrap gap-2.5 p-1.5">
 								{PROJECT_COLORS.map(c => (
 									<button
 										key={c}
 										type="button"
 										aria-label={c}
+										aria-pressed={color === c}
 										onClick={() => setColor(c)}
-										className={`size-7 rounded-full transition-transform ${color === c ? 'scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-surface' : ''}`}
+										className={`flex size-8 items-center justify-center rounded-full text-white transition-shadow ${
+											color === c
+												? 'outline-2 outline-offset-2 outline-foreground'
+												: 'hover:outline-2 hover:outline-offset-2 hover:outline-border'
+										}`}
 										style={{ background: c }}
-									/>
+									>
+										{color === c && <Check className="size-4" strokeWidth={3} />}
+									</button>
 								))}
 							</div>
 						</div>
