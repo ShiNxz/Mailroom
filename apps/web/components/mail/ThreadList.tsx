@@ -89,7 +89,7 @@ export function ThreadList({
 										{t.count > 1 && <span className="ml-1.5 text-xs font-normal text-muted">{t.count}</span>}
 									</span>
 									<span
-										className={`shrink-0 text-xs tabular-nums group-hover:hidden ${t.unread ? 'font-semibold text-foreground' : 'text-muted'}`}
+										className={`shrink-0 text-xs tabular-nums group-hover:invisible ${t.unread ? 'font-semibold text-foreground' : 'text-muted'}`}
 									>
 										{t.snoozedUntil ? (
 											<span className="inline-flex items-center gap-1 text-warning">
@@ -100,8 +100,9 @@ export function ThreadList({
 											listDate(t.date)
 										)}
 									</span>
+									{/* Floats over the date so hovering never changes the row height */}
 									<span
-										className="hidden shrink-0 items-center gap-0.5 group-hover:flex"
+										className="absolute top-1.5 right-2 z-10 hidden items-center gap-0.5 rounded-lg border border-separator bg-surface/95 p-0.5 shadow-sm backdrop-blur group-hover:flex"
 										onClick={e => e.stopPropagation()}
 									>
 										<HoverAction
