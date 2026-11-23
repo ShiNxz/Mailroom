@@ -1,0 +1,26 @@
+# Local dev only: Postgres, Valkey and a GreenMail test mail server (IMAP + SMTP, accepts any mail).
+#   docker compose -f docker-compose.dev.yml up -d
+# GreenMail users: alice@acme.test / secret, bob@acme.test / secret
+#   IMAP 3143 (plain) / 3993 (TLS, self-signed), SMTP 3025 (plain) / 3465 (TLS, self-signed)
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: mailroom
+      POSTGRES_PASSWORD: mailroom
+      POSTGRES_DB: mailroom
+    ports: ["55432:5432"]
+    volumes: [pgdata:/var/lib/postgresql]
+  valkey:
+    image: valkey/valkey:9.1.3-alpine
+    ports: ["56379:6379"]
+  greenmail:
+    image: greenmail/standalone:latest
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=alice:secret@acme.test,bob:secret@acme.test
+        -Dgreenmail.users.login=email -Dgreenmail.verbose
+    ports: ["3025:3025", "3143:3143", "3465:3465", "3993:3993"]
+volumes:
+  pgdata:

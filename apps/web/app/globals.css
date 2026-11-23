@@ -1,0 +1,90 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+	--font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+	--font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Mailroom accent: a calm indigo on both themes */
+:root {
+	--accent: oklch(0.58 0.2 268);
+	--accent-foreground: oklch(0.99 0 0);
+}
+.dark {
+	--accent: oklch(0.68 0.17 268);
+	--accent-foreground: oklch(0.16 0.02 268);
+	--background: oklch(0.155 0.006 270);
+	--surface: oklch(0.195 0.007 270);
+	--surface-secondary: oklch(0.225 0.008 270);
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	background: var(--background);
+	color: var(--foreground);
+	-webkit-font-smoothing: antialiased;
+	overflow: hidden;
+}
+
+/* Thin scrollbars for the three panes */
+.pane-scroll {
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
+}
+
+/* The composer editor (TipTap) */
+.mr-editor .ProseMirror {
+	min-height: 180px;
+	outline: none;
+	font-size: 14px;
+	line-height: 1.55;
+}
+.mr-editor .ProseMirror p {
+	margin: 0 0 0.5em;
+}
+.mr-editor .ProseMirror ul,
+.mr-editor .ProseMirror ol {
+	padding-left: 1.4em;
+	margin: 0 0 0.5em;
+}
+.mr-editor .ProseMirror ul {
+	list-style: disc;
+}
+.mr-editor .ProseMirror ol {
+	list-style: decimal;
+}
+.mr-editor .ProseMirror blockquote {
+	border-left: 3px solid var(--border);
+	padding-left: 0.8em;
+	color: var(--muted);
+	margin: 0 0 0.5em;
+}
+.mr-editor .ProseMirror a {
+	color: var(--accent);
+	text-decoration: underline;
+}
+.mr-editor .ProseMirror img {
+	max-width: 100%;
+}
+.mr-editor .ProseMirror p.is-editor-empty:first-child::before {
+	content: attr(data-placeholder);
+	color: var(--field-placeholder, var(--muted));
+	float: left;
+	height: 0;
+	pointer-events: none;
+}
+.mr-editor .ProseMirror [data-signature] {
+	color: var(--muted);
+}
+
+.signature-preview p {
+	margin: 0;
+}

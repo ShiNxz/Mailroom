@@ -1,0 +1,12 @@
+# Build context of apps/server/Dockerfile and apps/web/Dockerfile, both built from the repo root.
+# The images install their own dependencies from bun.lock, so nothing from a laptop may leak in.
+**/node_modules
+**/.next
+**/next-env.d.ts
+**/*.tsbuildinfo
+.git
+apps/mac
+
+# Env reaches the containers from Seylo, never through the image.
+**/.env
+**/.env.*
