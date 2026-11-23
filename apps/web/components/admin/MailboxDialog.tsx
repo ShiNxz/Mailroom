@@ -16,6 +16,16 @@ const SECURITY: { id: Security; label: string }[] = [
 	{ id: 'none', label: 'None (unsafe)' },
 ]
 
+// Standard ports per security mode. Picking one fills in the other, unless the port is a custom one.
+const PORTS = {
+	imap: { tls: 993, starttls: 143, none: 143 },
+	smtp: { tls: 465, starttls: 587, none: 25 },
+} satisfies Record<string, Record<Security, number>>
+const SECURITY_FOR_PORT: Record<'imap' | 'smtp', Record<number, Security>> = {
+	imap: { 993: 'tls', 143: 'starttls' },
+	smtp: { 465: 'tls', 587: 'starttls', 2525: 'starttls' },
+}
+
 const blank: MailboxSettings & { password: string } = {
 	address: '',
 	displayName: '',
@@ -102,6 +112,20 @@ export function MailboxDialog({
 	}, [isOpen, mailboxId])
 
 	const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm(f => ({ ...f, [key]: value }))
+
+	const setPort = (kind: 'imap' | 'smtp', raw: string) => {
+		const port = Number(raw.replace(/\D/g, '')) || 0
+		const security = SECURITY_FOR_PORT[kind][port]
+		setForm(f => ({ ...f, [`${kind}Port`]: port, ...(security ? { [`${kind}Security`]: security } : {}) }))
+	}
+
+	const setSecurity = (kind: 'imap' | 'smtp', security: Security) => {
+		setForm(f => {
+			const port = f[`${kind}Port`]
+			const standard = Object.values(PORTS[kind]).includes(port)
+			return { ...f, [`${kind}Security`]: security, ...(standard ? { [`${kind}Port`]: PORTS[kind][security] } : {}) }
+		})
+	}
 
 	const detect = async () => {
 		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.address)) return toast.error('Enter a valid email address')
@@ -278,17 +302,13 @@ export function MailboxDialog({
 												<Label>IMAP server (incoming)</Label>
 												<Input placeholder="imap.example.com" />
 											</TextField>
-											<TextField
-												value={String(form.imapPort)}
-												onChange={v => set('imapPort', Number(v.replace(/\D/g, '')) || 0)}
-												className="w-24"
-											>
+											<TextField value={String(form.imapPort)} onChange={v => setPort('imap', v)} className="w-24">
 												<Label>Port</Label>
 												<Input inputMode="numeric" />
 											</TextField>
 											<SecuritySelect
 												value={form.imapSecurity}
-												onChange={v => set('imapSecurity', v)}
+												onChange={v => setSecurity('imap', v)}
 												label="IMAP security"
 											/>
 										</div>
@@ -301,17 +321,13 @@ export function MailboxDialog({
 												<Label>SMTP server (outgoing)</Label>
 												<Input placeholder="smtp.example.com" />
 											</TextField>
-											<TextField
-												value={String(form.smtpPort)}
-												onChange={v => set('smtpPort', Number(v.replace(/\D/g, '')) || 0)}
-												className="w-24"
-											>
+											<TextField value={String(form.smtpPort)} onChange={v => setPort('smtp', v)} className="w-24">
 												<Label>Port</Label>
 												<Input inputMode="numeric" />
 											</TextField>
 											<SecuritySelect
 												value={form.smtpSecurity}
-												onChange={v => set('smtpSecurity', v)}
+												onChange={v => setSecurity('smtp', v)}
 												label="SMTP security"
 											/>
 										</div>
