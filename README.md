@@ -42,6 +42,18 @@ bun run web:dev                                   # http://localhost:3150
 
 `bun lint`, `bun typecheck`, `bun run db:generate` after changing `apps/server/src/db/schema.ts`.
 
+## Self-host
+
+Two images, published on every version tag by `.github/workflows/release.yml` (linux/amd64 and linux/arm64):
+
+- `ghcr.io/shinxz/mailroom-server:<version>`: the API (default command) and the sync worker (`bun src/worker.ts`)
+- `ghcr.io/shinxz/mailroom-web:<version>`: the web app, with `API_URL` pointing at the API
+
+On Seylo, the **Mailroom** template (Communication) creates everything: web, API, worker, Postgres and Redis,
+with a generated `APP_SECRET` and setup token. The template lives in Seylo-dev/App under `templates/mailroom`.
+
+To release: `git tag v0.2.0 && git push origin v0.2.0`, then bump the image defaults in the template.
+
 ## Deploy on Seylo
 
 Seylo project "Mailroom": Postgres 18 and Valkey 9 from Seylo, and three App services from this repo (build type Dockerfile, build context the repo root, deploy on push to `main`).
