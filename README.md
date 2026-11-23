@@ -14,7 +14,8 @@ Self-hosted mail client for running several projects (brands, clients, domains) 
 ```
 apps/server     Bun. src/api.ts (Elysia HTTP API) and src/worker.ts (IMAP sync, sending, health checks)
 apps/web        Next.js 16 + HeroUI v3. The UI, plus a /api/* proxy to the API service
-packages/shared Types used by both
+apps/mac        Native SwiftUI app for macOS (not deployed, built locally)
+packages/shared Types used by the server and the web app
 ```
 
 Postgres holds everything (mail, outbox, pending IMAP changes); Redis carries realtime events (worker -> API -> browser over SSE) and login throttling.
@@ -62,6 +63,22 @@ Seylo project "Mailroom": Postgres 18 and Valkey 9 from Seylo, and three App ser
 | `PORT`         | `3002` on the worker                                                              |
 
 `web` env: `API_URL=${{api.INTERNAL_URL}}`.
+
+## Mac app
+
+`apps/mac` is a native SwiftUI app with three panes: projects, mailboxes and folders, the thread list, and the reader. It has compose windows (send from any of your mailboxes, signatures, attachments, templates, send later), archive/delete/spam/snooze/move/star, live updates over the same event stream as the web app, notifications for new mail and an unread badge on the Dock icon. Projects, domains and people are still managed in the web app.
+
+It signs in to the web app's address (https://mail.lue.my) with your normal account and keeps a session token in the keychain. Emails render in a WKWebView with JavaScript off and remote images blocked until you allow them; inline images load through an internal scheme that adds the token.
+
+It needs the command line tools (Swift 6), not Xcode.
+
+```bash
+apps/mac/scripts/bundle.sh --install    # builds build/Mailroom.app and copies it to /Applications
+```
+
+The build is signed ad hoc, so macOS asks once to allow keychain access after each rebuild. For development it can skip the keychain and point at a local server: `MAILROOM_SERVER=http://localhost:3150 MAILROOM_TOKEN=<token from /api/auth/login with "client":"native"> apps/mac/build/Mailroom.app/Contents/MacOS/Mailroom`.
+
+Shortcuts: ⌘N new message, ⌘R reply, ⇧⌘R reply all, ⇧⌘F forward, ⌘E archive, ⌘⌫ delete, ⇧⌘U unread, ⇧⌘L star, ⇧⌘N get new mail.
 
 ## Gmail and Microsoft 365
 
