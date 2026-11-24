@@ -58,12 +58,13 @@ export function ThreadList({
 							onClick={() => onOpen(t)}
 							onKeyDown={e => e.key === 'Enter' && onOpen(t)}
 							data-thread={t.threadId}
-							className={`group relative flex cursor-pointer gap-3 border-b border-separator px-3 py-2.5 outline-none transition-colors ${
+							className={`group relative flex cursor-pointer gap-3 border-b border-separator py-2.5 pr-3 pl-4 outline-none transition-colors ${
 								selected ? 'bg-accent/10' : isChecked ? 'bg-default/60' : 'hover:bg-default/50'
 							}`}
 						>
 							{t.unread && (
-								<span className="absolute top-1/2 left-1 size-1.5 -translate-y-1/2 rounded-full bg-accent" />
+								// Level with the sender line (py-2.5 plus half of its 20px line height), in the left gutter
+								<span className="absolute top-5 left-1.5 size-1.5 -translate-y-1/2 rounded-full bg-accent" />
 							)}
 							<div className="flex shrink-0 flex-col items-center gap-1 pt-0.5" onClick={e => e.stopPropagation()}>
 								<Checkbox aria-label="Select" isSelected={isChecked} onChange={on => onCheck(t.threadId, on)}>
@@ -177,7 +178,7 @@ function HoverAction({ label, onClick, children }: { label: string; onClick: () 
 			title={label}
 			aria-label={label}
 			onClick={onClick}
-			className="rounded-md p-1 text-muted hover:bg-surface hover:text-foreground [&_svg]:size-3.5"
+			className="rounded-md p-1 text-muted transition-colors hover:bg-default hover:text-foreground [&_svg]:size-3.5"
 		>
 			{children}
 		</button>
