@@ -17,12 +17,13 @@ import {
 	TextField,
 } from '@heroui/react'
 import { formatDistanceToNow } from 'date-fns'
-import { Copy, KeyRound, Plus, Send, Trash2, Webhook } from 'lucide-react'
+import { Check, Copy, KeyRound, Plus, Send, Trash2, Webhook } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 import { IconButton } from '@/components/ui'
 import { api, fetcher, useBootstrap } from '@/lib/api'
+import { copyText } from '@/lib/clipboard'
 import { Section } from './Section'
 
 type TokenRow = ApiToken & { failedDeliveries: number }
@@ -34,21 +35,53 @@ const EXPIRY = [
 	{ id: 'never', label: 'Never', days: null },
 ] as const
 
+/** Copies `value`; the icon turns into a check for a moment. */
+function CopyButton({ value, what }: { value: string; what: string }) {
+	const [copied, setCopied] = useState(false)
+	useEffect(() => {
+		if (!copied) return
+		const t = setTimeout(() => setCopied(false), 1500)
+		return () => clearTimeout(t)
+	}, [copied])
+	return (
+		<IconButton
+			label={copied ? 'Copied' : `Copy ${what.toLowerCase()}`}
+			onPress={async () => {
+				if (await copyText(value)) {
+					setCopied(true)
+					toast.success(`${what} copied`)
+				} else toast.error("Couldn't copy. Select the text and copy it instead.")
+			}}
+		>
+			{copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+		</IconButton>
+	)
+}
+
 function CopyField({ label, value }: { label: string; value: string }) {
 	return (
 		<div className="flex flex-col gap-1">
 			<span className="text-xs font-medium text-muted">{label}</span>
 			<div className="flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2">
 				<code className="min-w-0 flex-1 truncate font-mono text-xs select-all">{value}</code>
-				<IconButton
-					label="Copy"
-					onPress={() => {
-						void navigator.clipboard.writeText(value)
-						toast.success(`${label} copied`)
-					}}
-				>
-					<Copy className="size-3.5" />
-				</IconButton>
+				<CopyButton value={value} what={label} />
+			</div>
+		</div>
+	)
+}
+
+/** A code block with a copy button that stays in the corner while the code scrolls sideways. */
+function CodeBlock({ label, what, value }: { label: string; what: string; value: string }) {
+	return (
+		<div className="flex flex-col gap-1">
+			<span className="text-xs font-medium text-muted">{label}</span>
+			<div className="relative">
+				<pre className="overflow-x-auto rounded-lg bg-surface-secondary py-3 pr-12 pl-3 font-mono text-xs leading-relaxed">
+					{value}
+				</pre>
+				<div className="absolute top-1.5 right-1.5 rounded-lg bg-surface-secondary">
+					<CopyButton value={value} what={what} />
+				</div>
 			</div>
 		</div>
 	)
@@ -222,17 +255,12 @@ support.on('message', async msg => {
   console.log(msg.from.address, msg.subject)
   await msg.reply({ text: 'Got it, thanks!' })
 })`
+	const curl = `curl -H "Authorization: Bearer $MAILROOM_TOKEN" ${origin}/api/mailboxes`
 	return (
-		<div className="flex flex-col gap-2">
-			<span className="text-xs font-medium text-muted">Use it</span>
-			<pre className="overflow-x-auto rounded-lg bg-surface-secondary p-3 font-mono text-xs leading-relaxed">{env}</pre>
-			<pre className="overflow-x-auto rounded-lg bg-surface-secondary p-3 font-mono text-xs leading-relaxed">
-				{code}
-			</pre>
-			<p className="text-xs text-muted">
-				Or without the SDK:{' '}
-				<code className="font-mono">curl -H "Authorization: Bearer $MAILROOM_TOKEN" {origin}/api/mailboxes</code>
-			</p>
+		<div className="flex flex-col gap-3">
+			<CodeBlock label="Environment variables" what="Variables" value={env} />
+			<CodeBlock label="Code (npm install mailroom-sdk)" what="Code" value={code} />
+			<CodeBlock label="Without the SDK" what="Command" value={curl} />
 		</div>
 	)
 }

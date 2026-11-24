@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { IconButton } from '@/components/ui'
 import { api, refreshBootstrap } from '@/lib/api'
+import { copyText } from '@/lib/clipboard'
 
 const ICON: Record<CheckStatus, React.ReactNode> = {
 	pass: <CheckCircle2 className="size-4 text-success" />,
@@ -48,9 +49,9 @@ function ScoreRing({ score }: { score: number }) {
 	)
 }
 
-const copy = (text: string) => {
-	void navigator.clipboard.writeText(text)
-	toast('Copied')
+const copy = async (text: string) => {
+	if (await copyText(text)) toast('Copied')
+	else toast.error("Couldn't copy. Select the text and copy it instead.")
 }
 
 function CheckRow({ check }: { check: HealthCheck }) {

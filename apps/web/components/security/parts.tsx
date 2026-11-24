@@ -8,6 +8,7 @@ import { Copy, Download } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { copyText } from '@/lib/clipboard'
 
 export function CodeInput({
 	value,
@@ -119,9 +120,9 @@ export function TotpSetup({ onDone }: { onDone: (recoveryCodes: string[] | null)
 							size="sm"
 							variant="ghost"
 							aria-label="Copy the key"
-							onPress={() => {
-								void navigator.clipboard.writeText(setup.secret.replace(/\s/g, ''))
-								toast.success('Key copied')
+							onPress={async () => {
+								if (await copyText(setup.secret.replace(/\s/g, ''))) toast.success('Key copied')
+								else toast.error("Couldn't copy. Select the text and copy it instead.")
 							}}
 						>
 							<Copy className="size-3.5" />
@@ -167,9 +168,9 @@ export function RecoveryCodes({
 				<Button
 					variant="secondary"
 					size="sm"
-					onPress={() => {
-						void navigator.clipboard.writeText(codes.join('\n'))
-						toast.success('Codes copied')
+					onPress={async () => {
+						if (await copyText(codes.join('\n'))) toast.success('Codes copied')
+						else toast.error("Couldn't copy. Select the text and copy it instead.")
 					}}
 				>
 					<Copy className="size-3.5" /> Copy
