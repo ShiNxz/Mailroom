@@ -73,6 +73,19 @@ function SecuritySelect({
 }
 
 /** Connect a mailbox (create) or change its settings (edit). Settings are detected from the address. */
+/**
+ * These are a mailbox's own login, not a Mailroom account. Without this, Safari and password managers treat
+ * the form as a sign-up: they offer (or fill in) a generated "strong password", highlight the username
+ * field and move focus around while you type.
+ */
+const NO_AUTOFILL = {
+	autoComplete: 'off',
+	'data-1p-ignore': '',
+	'data-lpignore': 'true',
+	'data-bwignore': '',
+	'data-form-type': 'other',
+} as const
+
 export function MailboxDialog({
 	isOpen,
 	onOpenChange,
@@ -240,7 +253,7 @@ export function MailboxDialog({
 						{step === 'address' ? (
 							<TextField value={form.address} onChange={v => set('address', v.trim())} type="email" autoFocus>
 								<Label>Email address</Label>
-								<Input placeholder="hello@yourdomain.com" />
+								<Input placeholder="hello@yourdomain.com" {...NO_AUTOFILL} />
 								<Description>We look up the server settings for you.</Description>
 							</TextField>
 						) : (
@@ -267,7 +280,7 @@ export function MailboxDialog({
 									)}
 									<TextField value={form.displayName} onChange={v => set('displayName', v)}>
 										<Label>Sender name</Label>
-										<Input placeholder={projectName || 'Your company'} />
+										<Input placeholder={projectName || 'Your company'} {...NO_AUTOFILL} />
 										<Description>The From name people see, next to the address.</Description>
 									</TextField>
 									<TextField
@@ -277,7 +290,7 @@ export function MailboxDialog({
 										autoFocus={!editing}
 									>
 										<Label>{editing ? 'New password (leave empty to keep)' : 'Password'}</Label>
-										<Input autoComplete="new-password" />
+										<Input {...NO_AUTOFILL} />
 									</TextField>
 								</div>
 
@@ -293,7 +306,7 @@ export function MailboxDialog({
 									<div className="flex flex-col gap-3 rounded-xl bg-surface-secondary p-3">
 										<TextField value={form.username} onChange={v => set('username', v)}>
 											<Label>Username</Label>
-											<Input />
+											<Input {...NO_AUTOFILL} />
 										</TextField>
 										<div className="flex flex-wrap items-end gap-2">
 											<TextField
@@ -302,11 +315,11 @@ export function MailboxDialog({
 												className="min-w-48 flex-1"
 											>
 												<Label>IMAP server (incoming)</Label>
-												<Input placeholder="imap.example.com" />
+												<Input placeholder="imap.example.com" {...NO_AUTOFILL} />
 											</TextField>
 											<TextField value={String(form.imapPort)} onChange={v => setPort('imap', v)} className="w-24">
 												<Label>Port</Label>
-												<Input inputMode="numeric" />
+												<Input inputMode="numeric" {...NO_AUTOFILL} />
 											</TextField>
 											<SecuritySelect
 												value={form.imapSecurity}
@@ -321,11 +334,11 @@ export function MailboxDialog({
 												className="min-w-48 flex-1"
 											>
 												<Label>SMTP server (outgoing)</Label>
-												<Input placeholder="smtp.example.com" />
+												<Input placeholder="smtp.example.com" {...NO_AUTOFILL} />
 											</TextField>
 											<TextField value={String(form.smtpPort)} onChange={v => setPort('smtp', v)} className="w-24">
 												<Label>Port</Label>
-												<Input inputMode="numeric" />
+												<Input inputMode="numeric" {...NO_AUTOFILL} />
 											</TextField>
 											<SecuritySelect
 												value={form.smtpSecurity}
