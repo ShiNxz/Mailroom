@@ -158,6 +158,8 @@ export function Composer({ draft, index }: { draft: ComposeDraft; index: number 
 			close(state.id)
 			void refreshBootstrap()
 			void mutate('/drafts')
+			// An open thread shows the reply right away (PendingReplies in ThreadView)
+			void mutate(key => typeof key === 'string' && key.startsWith('/outbox'))
 			const reopen = async () => {
 				try {
 					await api(`/outbox/${item.id}/cancel`, { method: 'POST' })
@@ -173,8 +175,11 @@ export function Composer({ draft, index }: { draft: ComposeDraft; index: number 
 				})
 			} else {
 				const undo = me?.user.settings.undoSeconds ?? 10
-				if (undo > 0) toast('Sending...', { duration: undo * 1000, action: { label: 'Undo', onClick: reopen } })
-				else toast.success('Sent')
+				// A reply shows in its thread with the countdown and Undo there; a new message gets the toast
+				if (!state.replyToMessageId) {
+					if (undo > 0) toast('Sending...', { duration: undo * 1000, action: { label: 'Undo', onClick: reopen } })
+					else toast.success('Sent')
+				}
 			}
 		} catch (err) {
 			toast.error('Could not send', { description: (err as Error).message })

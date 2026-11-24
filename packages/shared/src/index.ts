@@ -213,6 +213,11 @@ export interface ComposePayload {
 	attachmentIds: string[]
 	/** Attachments forwarded from the original message, by part id. */
 	forwardAttachments?: string[]
+	/** Overrides the mailbox's sender name for this message (API sends). */
+	fromName?: string | null
+	replyTo?: Address[]
+	/** Plain-text body. With html empty, the message goes out as text only. */
+	text?: string | null
 }
 
 export interface OutboxItem {
@@ -224,6 +229,8 @@ export interface OutboxItem {
 	error: string | null
 	attempts: number
 	payload: ComposePayload
+	/** The Message-ID header, once sent */
+	messageId: string | null
 	createdAt: string
 }
 

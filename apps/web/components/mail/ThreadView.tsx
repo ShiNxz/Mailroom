@@ -1,11 +1,13 @@
 'use client'
 
-import { type Folder, formatAddress, type Message, type Thread } from '@mailroom/shared'
-import { Button, Dropdown, Header, Label, Modal, Separator } from '@heroui/react'
+import { type Folder, formatAddress, type Message, type OutboxItem, type Thread } from '@mailroom/shared'
+import { Button, Dropdown, Header, Label, Modal, Separator, Spinner } from '@heroui/react'
 import { format } from 'date-fns'
 import {
+	AlertTriangle,
 	Archive,
 	ArrowLeft,
+	Check,
 	Clock,
 	Download,
 	FolderInput,
@@ -18,6 +20,7 @@ import {
 	Paperclip,
 	Reply,
 	ReplyAll,
+	RotateCcw,
 	ShieldAlert,
 	ShieldCheck,
 	Star,
@@ -26,10 +29,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
-import { useCompose } from '@/components/compose/context'
+import { draftFromPayload, newDraftId, useCompose } from '@/components/compose/context'
 import { EmptyState, IconButton, Loading, PersonAvatar } from '@/components/ui'
 import { REMOVES, replyDraft, snoozeOptions, type ThreadAction, threadAction, whoLine } from '@/lib/actions'
-import { fetcher, useBootstrap, useMe } from '@/lib/api'
+import { api, fetcher, useBootstrap, useMe } from '@/lib/api'
 import { displayName, fileSize, fullDate, listDate } from '@/lib/format'
 import { EmailFrame } from './EmailFrame'
 
@@ -239,6 +242,7 @@ export function ThreadView({
 								onStar={() => void act(starred ? 'unstar' : 'star')}
 							/>
 						))}
+						<PendingReplies threadId={data.threadId} messages={messages} me={myAddresses} />
 					</div>
 					<div className="mt-4 flex flex-wrap gap-2 pb-24">
 						<Button variant="secondary" onPress={() => reply('reply')}>
@@ -485,5 +489,132 @@ function MessageCard({
 				</div>
 			)}
 		</article>
+	)
+}
+
+// --- Replies on their way -------------------------------------------------------------------------
+
+const SENT_GRACE_MS = 10 * 60_000
+
+/**
+ * Replies to this thread that are not in it yet, shown at once with their state: waiting out the undo
+ * window, sending, sent (until the copy in Sent syncs in and takes its place), or failed.
+ */
+function PendingReplies({ threadId, messages, me }: { threadId: string; messages: Message[]; me: Set<string> }) {
+	const { open } = useCompose()
+	const { data: boot } = useBootstrap()
+	const [now, setNow] = useState(() => Date.now())
+	const known = new Set(messages.map(m => m.messageId).filter(Boolean))
+	const { data, mutate } = useSWR<{ items: OutboxItem[] }>(`/outbox?thread=${threadId}`, fetcher, {
+		// Outbox events refresh it too; polling covers the copy in Sent arriving a bit later
+		refreshInterval: d => (d?.items.some(i => i.status !== 'failed') ? 3000 : 0),
+	})
+	const items = (data?.items ?? []).filter(
+		i =>
+			!(i.messageId && known.has(i.messageId)) &&
+			!(i.status === 'sent' && i.sentAt && now - new Date(i.sentAt).getTime() > SENT_GRACE_MS),
+	)
+	const waiting = items.some(i => i.status === 'queued')
+	useEffect(() => {
+		if (!waiting) return
+		const timer = setInterval(() => setNow(Date.now()), 1000)
+		return () => clearInterval(timer)
+	}, [waiting])
+	if (!items.length) return null
+
+	const reopen = async (item: OutboxItem) => {
+		try {
+			await api(`/outbox/${item.id}/cancel`, { method: 'POST' })
+			open(draftFromPayload(newDraftId(), item.payload))
+		} catch (err) {
+			toast.error((err as Error).message)
+		}
+		void mutate()
+	}
+	const retry = async (item: OutboxItem) => {
+		try {
+			await api(`/outbox/${item.id}`, { method: 'PATCH', body: { sendAt: 'now' } })
+		} catch (err) {
+			toast.error((err as Error).message)
+		}
+		void mutate()
+	}
+
+	return (
+		<>
+			{items.map(item => {
+				const address = boot?.projects.flatMap(p => p.mailboxes).find(m => m.id === item.mailboxId)?.address ?? ''
+				const secondsLeft = Math.ceil((new Date(item.sendAt).getTime() - now) / 1000)
+				const scheduled = item.status === 'queued' && secondsLeft > 60
+				const html =
+					item.payload.html ||
+					(item.payload.text
+						? `<div style="white-space:pre-wrap">${item.payload.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`
+						: '')
+				return (
+					<article key={item.id} className="py-5" aria-busy={item.status === 'queued' || item.status === 'sending'}>
+						<header className="flex items-start gap-3">
+							<PersonAvatar who={{ name: '', address }} size={40} />
+							<div className="min-w-0 flex-1">
+								<div className="text-sm font-medium text-foreground">You</div>
+								<div className="truncate text-xs text-muted">{address}</div>
+								<div className="truncate text-xs text-muted">
+									to {whoLine(item.payload.to, me) || 'undisclosed recipients'}
+								</div>
+							</div>
+							<div className="flex shrink-0 items-center gap-2 text-xs">
+								{item.status === 'failed' ? (
+									<>
+										<span className="inline-flex items-center gap-1 font-medium text-danger">
+											<AlertTriangle className="size-3.5" /> Not sent
+										</span>
+										<Button size="sm" variant="secondary" onPress={() => void retry(item)}>
+											<RotateCcw className="size-3.5" /> Retry
+										</Button>
+										<Button size="sm" variant="ghost" onPress={() => void reopen(item)}>
+											Edit
+										</Button>
+									</>
+								) : item.status === 'sent' ? (
+									<span className="inline-flex items-center gap-1 text-success">
+										<Check className="size-3.5" /> Sent
+									</span>
+								) : scheduled ? (
+									<>
+										<span className="inline-flex items-center gap-1 text-muted">
+											<Clock className="size-3.5" /> Scheduled for{' '}
+											{format(new Date(item.sendAt), "EEE, MMM d 'at' HH:mm")}
+										</span>
+										<Button size="sm" variant="ghost" onPress={() => void reopen(item)}>
+											Cancel
+										</Button>
+									</>
+								) : (
+									<>
+										<span className="inline-flex items-center gap-1.5 text-muted">
+											<Spinner size="sm" />
+											{item.status === 'queued' && secondsLeft > 0 ? `Sending in ${secondsLeft}s` : 'Sending'}
+										</span>
+										{item.status === 'queued' && secondsLeft > 0 && (
+											<Button size="sm" variant="ghost" onPress={() => void reopen(item)}>
+												Undo
+											</Button>
+										)}
+									</>
+								)}
+							</div>
+						</header>
+						{item.error && item.status === 'failed' && (
+							<div className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger">{item.error}</div>
+						)}
+						<div
+							className={`mt-4 transition-opacity ${item.status === 'sent' || item.status === 'failed' ? '' : 'opacity-70'}`}
+						>
+							<EmailFrame html={html} allowImages />
+						</div>
+					</article>
+				)
+			})}
+		</>
 	)
 }

@@ -64,21 +64,7 @@ export function ThreadList({
 								selected ? 'bg-accent/10' : isChecked ? 'bg-default/60' : 'hover:bg-default/50'
 							}`}
 						>
-							{/* The sender's avatar; a checkbox on hover, and on every row while some are picked */}
-							<div className="relative size-10 shrink-0" onClick={e => e.stopPropagation()}>
-								<div className={selecting ? 'hidden' : 'group-hover:hidden'}>
-									<PersonAvatar who={t.from} size={40} />
-								</div>
-								<div
-									className={`absolute inset-0 items-center justify-center ${selecting ? 'flex' : 'hidden group-hover:flex'}`}
-								>
-									<Checkbox aria-label="Select" isSelected={isChecked} onChange={on => onCheck(t.threadId, on)}>
-										<Checkbox.Control>
-											<Checkbox.Indicator />
-										</Checkbox.Control>
-									</Checkbox>
-								</div>
-							</div>
+							<PersonAvatar who={t.from} size={40} />
 							<div className="min-w-0 flex-1">
 								<div className="flex items-center gap-2">
 									<span
@@ -88,7 +74,7 @@ export function ThreadList({
 										{t.count > 1 && <span className="ml-1.5 text-xs font-normal text-muted">{t.count}</span>}
 									</span>
 									<span
-										className={`shrink-0 text-xs tabular-nums group-hover:invisible ${t.unread ? 'font-semibold text-foreground' : 'text-muted'}`}
+										className={`shrink-0 text-xs tabular-nums group-hover:invisible ${selecting ? 'invisible' : ''} ${t.unread ? 'font-semibold text-foreground' : 'text-muted'}`}
 									>
 										{t.snoozedUntil ? (
 											<span className="inline-flex items-center gap-1 text-warning">
@@ -100,15 +86,27 @@ export function ThreadList({
 										)}
 									</span>
 									<span
-										className={`size-2 shrink-0 rounded-full ${t.unread ? 'bg-accent' : 'bg-transparent'} group-hover:invisible`}
+										className={`size-2 shrink-0 rounded-full ${t.unread ? 'bg-accent' : 'bg-transparent'} group-hover:invisible ${selecting ? 'invisible' : ''}`}
 									>
 										{t.unread && <span className="sr-only">Unread</span>}
 									</span>
+									{/* While picking several, each row shows its checkbox where the date was */}
+									{selecting && (
+										<span
+											className="absolute top-2.5 right-3 z-10 flex items-center p-1 group-hover:hidden"
+											onClick={e => e.stopPropagation()}
+										>
+											<RowCheckbox checked={isChecked} onChange={on => onCheck(t.threadId, on)} />
+										</span>
+									)}
 									{/* Floats over the date so hovering never changes the row height */}
 									<span
 										className="absolute top-2 right-3 z-10 hidden items-center gap-0.5 rounded-lg border border-separator bg-surface/95 p-0.5 shadow-sm backdrop-blur group-hover:flex"
 										onClick={e => e.stopPropagation()}
 									>
+										<span className="flex items-center px-1">
+											<RowCheckbox checked={isChecked} onChange={on => onCheck(t.threadId, on)} />
+										</span>
 										<HoverAction
 											label="Archive"
 											onClick={() => {
@@ -184,6 +182,20 @@ export function ThreadList({
 				{loadingMore && <p className="py-2 text-center text-xs text-muted">Loading more...</p>}
 			</div>
 		</ul>
+	)
+}
+
+function RowCheckbox({ checked, onChange }: { checked: boolean; onChange: (on: boolean) => void }) {
+	return (
+		<Checkbox aria-label="Select" isSelected={checked} onChange={onChange}>
+			{/* Content is the clickable part (a label around a hidden input); the control alone does nothing */}
+			<Checkbox.Content>
+				{/* An outline so it reads on the white toolbar */}
+				<Checkbox.Control className="size-4 ring-1 ring-border">
+					<Checkbox.Indicator />
+				</Checkbox.Control>
+			</Checkbox.Content>
+		</Checkbox>
 	)
 }
 

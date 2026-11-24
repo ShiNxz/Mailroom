@@ -34,6 +34,7 @@ const toOutbox = (r: typeof schema.outbox.$inferSelect): OutboxItem => ({
 	error: r.error,
 	attempts: r.attempts,
 	payload: r.payload,
+	messageId: r.messageId,
 	createdAt: r.createdAt.toISOString(),
 })
 
@@ -118,6 +119,35 @@ export const composeRoutes = new Elysia()
 	.get(
 		'/outbox',
 		async ({ user, query }) => {
+			// A thread's replies that are not in it yet: waiting, sending, failed, or sent in the last day
+			// but not synced back from Sent. The thread shows them right away with their state.
+			if (query.thread) {
+				const ids = await accessibleMailboxIds(user)
+				const inThread = ids.length
+					? await db
+							.select({ id: schema.messages.id })
+							.from(schema.messages)
+							.where(and(eq(schema.messages.threadId, query.thread), inArray(schema.messages.mailboxId, ids)))
+					: []
+				if (!inThread.length) return { items: [] }
+				const rows = await db
+					.select()
+					.from(schema.outbox)
+					.where(
+						and(
+							eq(schema.outbox.userId, user.id),
+							inArray(schema.outbox.status, ['queued', 'sending', 'failed', 'sent']),
+							sql`${schema.outbox.createdAt} > now() - interval '1 day'`,
+							inArray(
+								sql`${schema.outbox.payload}->>'replyToMessageId'`,
+								inThread.map(m => m.id),
+							),
+						),
+					)
+					.orderBy(schema.outbox.createdAt)
+					.limit(50)
+				return { items: rows.map(toOutbox) }
+			}
 			const statuses = (query.status ?? 'queued,failed').split(',') as OutboxItem['status'][]
 			const rows = await db
 				.select()
@@ -127,7 +157,7 @@ export const composeRoutes = new Elysia()
 				.limit(200)
 			return { items: rows.map(toOutbox) }
 		},
-		{ query: t.Object({ status: t.Optional(t.String()) }) },
+		{ query: t.Object({ status: t.Optional(t.String()), thread: t.Optional(t.String({ maxLength: 64 })) }) },
 	)
 
 	.post('/outbox/:id/cancel', async ({ user, params }) => {
