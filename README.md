@@ -9,6 +9,8 @@ Self-hosted mail client for running several projects (brands, clients, domains) 
 - Undo send, scheduled send, snooze, templates (personal or shared per project), drafts that follow you
 - Domain health: MX, SPF (with lookup count and sending-server check), DKIM, DMARC, reverse DNS, blocklists, MTA-STS, TLS-RPT, BIMI, with the exact records to add
 - People: owner, admins, members with per-project or per-mailbox access
+- Sign-in security: every account needs a passkey (Touch ID, Face ID, Windows Hello, security keys) or an authenticator app, with recovery codes
+- API tokens and `mailroom-sdk`: apps send and receive mail through Mailroom instead of SMTP and IMAP (see `packages/sdk`)
 - Safe reading: HTML is sanitized and shown in a sandboxed iframe, remote images blocked until you allow them
 
 ```
@@ -16,6 +18,7 @@ apps/server     Bun. src/api.ts (Elysia HTTP API) and src/worker.ts (IMAP sync, 
 apps/web        Next.js 16 + HeroUI v3. The UI, plus a /api/* proxy to the API service
 apps/mac        Native SwiftUI app for macOS (not deployed, built locally)
 packages/shared Types used by the server and the web app
+packages/sdk    mailroom-sdk on npm: send, listen for new mail, reply, verify webhooks
 ```
 
 Postgres holds everything (mail, outbox, pending IMAP changes); Redis carries realtime events (worker -> API -> browser over SSE) and login throttling.
@@ -50,7 +53,7 @@ Two images, published on every version tag by `.github/workflows/release.yml` (l
 - `ghcr.io/shinxz/mailroom-web:<version>`: the web app, with `API_URL` pointing at the API
 
 On Seylo, the **Mailroom** template (Communication) creates everything: web, API, worker, Postgres and Redis,
-with a generated `APP_SECRET` and setup token. The template lives in Seylo-dev/App under `templates/mailroom`.
+with a generated `APP_SECRET` and setup token. The template lives in Seylo-dev/Templates under `templates/mailroom`.
 
 To release: `git tag v0.2.0 && git push origin v0.2.0`, then bump the image defaults in the template.
 
@@ -72,15 +75,20 @@ Seylo project "Mailroom": Postgres 18 and Valkey 9 from Seylo, and three App ser
 | `REDIS_URL`    | `${{redis.INTERNAL_URL}}`                                                         |
 | `APP_SECRET`   | Same value on both. Encrypts mailbox passwords: changing it makes them unreadable |
 | `SETUP_TOKEN`  | Asked for when creating the owner account on first run                            |
+| `PUBLIC_URL`   | On `api`: `${{web.URL}}`. Passkeys are bound to this address; cross-site writes refused |
 | `PORT`         | `3002` on the worker                                                              |
 
 `web` env: `API_URL=${{api.INTERNAL_URL}}`.
+
+Locked out (lost the passkey, the phone and the recovery codes)? Admins reset a person under People. For the
+owner, run in the `api` service's console: `bun src/reset-sign-in.ts you@example.com`, then sign in with the
+password and set up a new passkey or authenticator.
 
 ## Mac app
 
 `apps/mac` is a native SwiftUI app with three panes: projects, mailboxes and folders, the thread list, and the reader. It has compose windows (send from any of your mailboxes, signatures, attachments, templates, send later), archive/delete/spam/snooze/move/star, live updates over the same event stream as the web app, notifications for new mail and an unread badge on the Dock icon. Projects, domains and people are still managed in the web app.
 
-It signs in to the web app's address (https://mail.lue.my) with your normal account and keeps a session token in the keychain. Emails render in a WKWebView with JavaScript off and remote images blocked until you allow them; inline images load through an internal scheme that adds the token.
+It signs in through the browser: it shows a code and opens the web app, where you sign in (passkey or code) and approve it. It keeps its own session token in the keychain. Emails render in a WKWebView with JavaScript off and remote images blocked until you allow them; inline images load through an internal scheme that adds the token.
 
 It needs the command line tools (Swift 6), not Xcode.
 
@@ -88,7 +96,7 @@ It needs the command line tools (Swift 6), not Xcode.
 apps/mac/scripts/bundle.sh --install    # builds build/Mailroom.app and copies it to /Applications
 ```
 
-The build is signed ad hoc, so macOS asks once to allow keychain access after each rebuild. For development it can skip the keychain and point at a local server: `MAILROOM_SERVER=http://localhost:3150 MAILROOM_TOKEN=<token from /api/auth/login with "client":"native"> apps/mac/build/Mailroom.app/Contents/MacOS/Mailroom`.
+The build is signed ad hoc, so macOS asks once to allow keychain access after each rebuild. For development it can skip the keychain and point at a local server: `MAILROOM_SERVER=http://localhost:3150 MAILROOM_TOKEN=<session token from /api/auth/device/poll> apps/mac/build/Mailroom.app/Contents/MacOS/Mailroom`.
 
 Shortcuts: ⌘N new message, ⌘R reply, ⇧⌘R reply all, ⇧⌘F forward, ⌘E archive, ⌘⌫ delete, ⇧⌘U unread, ⇧⌘L star, ⇧⌘N get new mail.
 
