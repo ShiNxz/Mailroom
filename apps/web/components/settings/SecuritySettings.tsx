@@ -6,7 +6,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Fingerprint, KeyRound, Laptop, LogOut, Pencil, Plus, Smartphone, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import useSWR from 'swr'
+import useSWR, { mutate as revalidate } from 'swr'
 import { RecoveryCodes, TotpSetup } from '@/components/security/parts'
 import { IconButton } from '@/components/ui'
 import { api, fetcher, useMe } from '@/lib/api'
@@ -44,9 +44,126 @@ function deviceOf(label: string | null) {
 	return [browser, os].filter(Boolean).join(' on ') || label.slice(0, 60)
 }
 
-export function SecuritySettings() {
-	const { data: me, mutate } = useMe()
+function PasswordSection() {
+	const [current, setCurrent] = useState('')
+	const [next, setNext] = useState('')
+	const [busy, setBusy] = useState(false)
+
+	const changePassword = async () => {
+		setBusy(true)
+		try {
+			await api('/auth/password', { body: { current, next } })
+			setCurrent('')
+			setNext('')
+			toast.success('Password changed. Other devices were signed out.')
+			void revalidate('/auth/sessions')
+		} catch (err) {
+			toast.error((err as Error).message)
+		} finally {
+			setBusy(false)
+		}
+	}
+
+	return (
+		<Section title="Password" description="Changing it signs you out everywhere else.">
+			<form
+				className="flex flex-col gap-3"
+				onSubmit={e => {
+					e.preventDefault()
+					if (current && next) void changePassword()
+				}}
+			>
+				<div className="grid gap-3 sm:grid-cols-2">
+					<TextField value={current} onChange={setCurrent} type="password">
+						<Label>Current password</Label>
+						<Input autoComplete="current-password" />
+					</TextField>
+					<TextField value={next} onChange={setNext} type="password">
+						<Label>New password</Label>
+						<Input autoComplete="new-password" placeholder="At least 10 characters" />
+					</TextField>
+				</div>
+				<div>
+					<Button type="submit" variant="secondary" isPending={busy} isDisabled={!current || !next}>
+						Change password
+					</Button>
+				</div>
+			</form>
+		</Section>
+	)
+}
+
+function SessionsSection() {
 	const { data: sessions, mutate: reloadSessions } = useSWR<{ sessions: SessionInfo[] }>('/auth/sessions', fetcher)
+	const [busy, setBusy] = useState(false)
+	const others = sessions?.sessions.filter(s => !s.current) ?? []
+
+	const signOutOthers = async () => {
+		if (!window.confirm(`Sign out ${others.length} other ${others.length === 1 ? 'device' : 'devices'}?`)) return
+		setBusy(true)
+		try {
+			for (const s of others) await api(`/auth/sessions/${s.id}`, { method: 'DELETE' })
+			toast.success('Signed out everywhere else')
+		} catch (err) {
+			toast.error((err as Error).message)
+		} finally {
+			setBusy(false)
+			void reloadSessions()
+		}
+	}
+
+	return (
+		<Section
+			title="Where you're signed in"
+			action={
+				others.length > 0 && (
+					<Button size="sm" variant="ghost" isPending={busy} onPress={() => void signOutOthers()}>
+						<LogOut className="size-3.5" /> Sign out others
+					</Button>
+				)
+			}
+		>
+			{sessions?.sessions.map(s => (
+				<div key={s.id} className="flex items-center gap-3">
+					<Laptop className="size-4 shrink-0 text-muted" />
+					<div className="min-w-0 flex-1">
+						<div className="truncate text-sm">
+							{deviceOf(s.label)}
+							{s.current && <span className="ml-2 text-xs text-success">This device</span>}
+						</div>
+						<div className="text-xs text-muted">
+							Active {ago(s.lastSeenAt)} · signed in {ago(s.createdAt)}
+						</div>
+					</div>
+					{!s.current && (
+						<IconButton
+							label="Sign out this device"
+							onPress={async () => {
+								await api(`/auth/sessions/${s.id}`, { method: 'DELETE' }).catch(err => toast.error(err.message))
+								void reloadSessions()
+							}}
+						>
+							<LogOut className="size-4" />
+						</IconButton>
+					)}
+				</div>
+			))}
+		</Section>
+	)
+}
+
+export function SecuritySettings() {
+	return (
+		<>
+			<PasswordSection />
+			<SignInSection />
+			<SessionsSection />
+		</>
+	)
+}
+
+function SignInSection() {
+	const { data: me, mutate } = useMe()
 	const [busy, setBusy] = useState(false)
 	const [totpOpen, setTotpOpen] = useState(false)
 	const [codes, setCodes] = useState<string[] | null>(null)
@@ -70,7 +187,7 @@ export function SecuritySettings() {
 
 	return (
 		<Section
-			title="Sign-in security"
+			title="Two-step sign-in"
 			description="Every sign-in needs your password and a passkey or authenticator code, or a passkey alone."
 		>
 			<div className="flex flex-col gap-2">
@@ -174,35 +291,6 @@ export function SecuritySettings() {
 				>
 					New codes
 				</Button>
-			</div>
-
-			<div className="flex flex-col gap-2 border-t border-separator pt-4">
-				<h3 className="text-sm font-medium">Where you're signed in</h3>
-				{sessions?.sessions.map(s => (
-					<div key={s.id} className="flex items-center gap-3">
-						<Laptop className="size-4 shrink-0 text-muted" />
-						<div className="min-w-0 flex-1">
-							<div className="truncate text-sm">
-								{deviceOf(s.label)}
-								{s.current && <span className="ml-2 text-xs text-success">This device</span>}
-							</div>
-							<div className="text-xs text-muted">
-								Active {ago(s.lastSeenAt)} · signed in {ago(s.createdAt)}
-							</div>
-						</div>
-						{!s.current && (
-							<IconButton
-								label="Sign out this device"
-								onPress={async () => {
-									await api(`/auth/sessions/${s.id}`, { method: 'DELETE' }).catch(err => toast.error(err.message))
-									void reloadSessions()
-								}}
-							>
-								<LogOut className="size-4" />
-							</IconButton>
-						)}
-					</div>
-				))}
 			</div>
 
 			<Modal.Backdrop isOpen={totpOpen} onOpenChange={setTotpOpen}>

@@ -1,7 +1,7 @@
 'use client'
 
 import type { User } from '@mailroom/shared'
-import { Alert, Button, Chip, Label, Switch } from '@heroui/react'
+import { Alert, Button, Chip, Description, Label, Switch } from '@heroui/react'
 import { formatDistanceToNow } from 'date-fns'
 import { BellRing, Download, Smartphone, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -24,9 +24,20 @@ import {
 	subscribeThisBrowser,
 	unsubscribeThisBrowser,
 } from '@/lib/pwa'
+import { useSaveSettings } from './General'
 import { Section } from './Section'
 
 export function NotificationsSettings() {
+	return (
+		<>
+			<PushNotifications />
+			<NotifyMailboxes />
+			<TabNotifications />
+		</>
+	)
+}
+
+function PushNotifications() {
 	const branding = useBranding()
 	const { data, mutate } = useSWR<PushState>('/push', fetcher)
 	const [hereHash, setHereHash] = useState<string | null>(null)
@@ -94,10 +105,7 @@ export function NotificationsSettings() {
 	}
 
 	return (
-		<Section
-			title="Notifications"
-			description="New mail on your phone and computer, even with the app closed. Only for mailboxes you can open."
-		>
+		<Section title="Push notifications" description="A notification for each new email, even with the app closed.">
 			{(installable || iosNeedsInstall) && (
 				<div className="flex items-center gap-3 rounded-xl bg-surface-secondary p-3">
 					<Smartphone className="size-5 shrink-0 text-muted" />
@@ -160,8 +168,6 @@ export function NotificationsSettings() {
 					)}
 				</div>
 			</div>
-
-			<NotifyMailboxes />
 
 			{others.length > 0 && (
 				<div className="flex flex-col gap-2 border-t border-separator pt-4">
@@ -249,18 +255,16 @@ function NotifyMailboxes() {
 	}
 
 	return (
-		<div className="flex flex-col gap-3 border-t border-separator pt-4">
-			<div>
-				<h3 className="text-sm font-medium">Notify me about</h3>
-				<p className="text-xs text-muted">
-					{on === total
-						? 'Every mailbox you can open.'
-						: on === 0
-							? 'Nothing: every mailbox is off.'
-							: `${on} of ${total} mailboxes.`}{' '}
-					Applies to all your devices.
-				</p>
-			</div>
+		<Section
+			title="Mailboxes"
+			description={`${
+				on === total
+					? 'Every mailbox you can open notifies.'
+					: on === 0
+						? 'Nothing notifies: every mailbox is off.'
+						: `${on} of ${total} mailboxes notify.`
+			} Applies to all your devices.`}
+		>
 			<div className="flex flex-col gap-3">
 				{projects.map(p => {
 					const ids = p.mailboxes.map(m => m.id)
@@ -293,7 +297,37 @@ function NotifyMailboxes() {
 					)
 				})}
 			</div>
-		</div>
+		</Section>
+	)
+}
+
+/** The page's own notification while it is open in a tab (the older, simpler kind). */
+function TabNotifications() {
+	const { data: me } = useMe()
+	const save = useSaveSettings()
+	return (
+		<Section title="While the app is open">
+			<Switch
+				isSelected={me?.user.settings.notifications ?? false}
+				onChange={async on => {
+					if (on && 'Notification' in window && Notification.permission !== 'granted') {
+						const p = await Notification.requestPermission()
+						if (p !== 'granted') return toast.error('The browser blocked notifications for this site')
+					}
+					void save({ settings: { notifications: on } })
+				}}
+			>
+				<Switch.Content>
+					<Switch.Control>
+						<Switch.Thumb />
+					</Switch.Control>
+					<div className="flex flex-col gap-0.5">
+						<Label>Notify from the open tab</Label>
+						<Description>For browsers without push. Skipped on a device that already gets push.</Description>
+					</div>
+				</Switch.Content>
+			</Switch>
+		</Section>
 	)
 }
 

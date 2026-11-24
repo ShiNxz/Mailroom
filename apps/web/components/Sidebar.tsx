@@ -32,6 +32,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { api, useBootstrap, useMe } from '@/lib/api'
 import { ActiveIndicator } from '@/lib/motion'
 import { ordered, useSidebarPrefs } from '@/lib/sidebar'
+import { toggleTheme } from '@/lib/theme'
 import { BrandMark, useBranding } from './Brand'
 import { useCompose } from './compose/context'
 import { type MenuItem, useContextMenu } from './ContextMenu'
@@ -546,16 +547,6 @@ function ProjectsList({
 			)}
 		</>
 	)
-}
-
-export function toggleTheme() {
-	const root = document.documentElement
-	const next = root.classList.contains('dark') ? 'light' : 'dark'
-	root.classList.toggle('dark', next === 'dark')
-	root.dataset.theme = next
-	try {
-		localStorage.setItem('mr-theme', next)
-	} catch {}
 }
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

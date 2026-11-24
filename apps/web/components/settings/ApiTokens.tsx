@@ -18,7 +18,7 @@ import {
 } from '@heroui/react'
 import { formatDistanceToNow } from 'date-fns'
 import { Copy, KeyRound, Plus, Send, Trash2, Webhook } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 import { IconButton } from '@/components/ui'
@@ -59,6 +59,8 @@ export function ApiTokens() {
 	const { data: boot } = useBootstrap()
 	const [open, setOpen] = useState(false)
 	const [created, setCreated] = useState<NewApiToken | null>(null)
+	const [apiBase, setApiBase] = useState('/api')
+	useEffect(() => setApiBase(`${window.location.origin}/api`), [])
 	const projects = boot?.projects ?? []
 
 	const scopeText = (scope: TokenScope) => {
@@ -72,12 +74,19 @@ export function ApiTokens() {
 
 	return (
 		<Section
-			title="API tokens"
+			title="Your tokens"
 			description={
 				<>
-					Let your apps send and receive mail through{' '}
-					{typeof window !== 'undefined' ? window.location.host : 'Mailroom'} instead of SMTP. A token reaches only what
-					you can, narrowed to the mailboxes you pick.
+					Apps call <code className="font-mono text-xs">{apiBase}</code> with a token. The{' '}
+					<a
+						href="https://www.npmjs.com/package/mailroom-sdk"
+						target="_blank"
+						rel="noreferrer"
+						className="text-accent hover:underline"
+					>
+						mailroom-sdk
+					</a>{' '}
+					package does it for you.
 				</>
 			}
 			action={
@@ -86,7 +95,9 @@ export function ApiTokens() {
 				</Button>
 			}
 		>
-			{data && !data.tokens.length && <p className="text-sm text-muted">No tokens yet.</p>}
+			{data && !data.tokens.length && (
+				<p className="text-sm text-muted">No tokens yet. Make one per app, scoped to the mailboxes it sends from.</p>
+			)}
 			{data?.tokens.map(t => (
 				<div key={t.id} className="flex items-start gap-3 rounded-lg border border-separator px-3 py-2.5">
 					<KeyRound className="mt-0.5 size-4 shrink-0 text-muted" />
