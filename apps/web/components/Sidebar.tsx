@@ -584,8 +584,14 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 			onClickCapture={e => (e.target as HTMLElement).closest('a') && onNavigate?.()}
 		>
 			<div className="flex h-14 shrink-0 items-center gap-2 px-4">
-				<BrandMark branding={branding} />
-				<span className="min-w-0 flex-1 truncate font-semibold tracking-tight">{branding.name}</span>
+				{/* Back to the inbox, like a site logo */}
+				<Link
+					href="/mail"
+					className="-mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-focus"
+				>
+					<BrandMark branding={branding} />
+					<span className="min-w-0 flex-1 truncate font-semibold tracking-tight">{branding.name}</span>
+				</Link>
 				<button
 					type="button"
 					aria-label="Toggle theme"
