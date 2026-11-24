@@ -266,7 +266,8 @@ export function MailboxDialog({
 									)}
 									<TextField value={form.displayName} onChange={v => set('displayName', v)}>
 										<Label>Sender name</Label>
-										<Input placeholder="Acme Support" />
+										<Input placeholder="SkinHub | Support" />
+										<Description>The From name people see, next to the address.</Description>
 									</TextField>
 									<TextField
 										value={form.password}

@@ -1,10 +1,11 @@
 'use client'
 
-import type { ComposePayload, OutboxItem, Template, Upload } from '@mailroom/shared'
+import { type ComposePayload, isAdminRole, type OutboxItem, type Template, type Upload } from '@mailroom/shared'
 import { Button, Dropdown, Header, Label, ListBox, Modal, Select, Separator, Spinner } from '@heroui/react'
 import type { Editor as TiptapEditor } from '@tiptap/react'
 import { addDays, format, nextMonday, setHours, setMinutes, startOfDay } from 'date-fns'
 import { ChevronDown, Clock, FileText, Maximize2, Minimize2, Minus, Paperclip, Send, Trash2, X } from 'lucide-react'
+import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import useSWR, { mutate } from 'swr'
@@ -292,6 +293,18 @@ export function Composer({ draft, index }: { draft: ComposeDraft; index: number 
 							</Select.Popover>
 						</Select>
 					</div>
+					{mailbox && !mailbox.displayName.trim() && (
+						<div className="flex items-center gap-1.5 border-b border-separator bg-warning/10 px-4 py-1.5 text-xs text-warning">
+							<span className="min-w-0 flex-1">
+								This mailbox has no sender name, so people see only {mailbox.address}.
+							</span>
+							{me && isAdminRole(me.user.role) && (
+								<Link href={`/admin/projects?id=${mailbox.projectId}`} className="shrink-0 font-medium underline">
+									Add a sender name
+								</Link>
+							)}
+						</div>
+					)}
 
 					<RecipientInput
 						label="To"
