@@ -215,6 +215,8 @@ export interface ComposePayload {
 	replyToMessageId?: string | null
 	forwardOfMessageId?: string | null
 	attachmentIds: string[]
+	/** Content-IDs by upload id (API sends): those attachments go inline, for <img src="cid:..."> in the html. */
+	attachmentCids?: Record<string, string> | null
 	/** Attachments forwarded from the original message, by part id. */
 	forwardAttachments?: string[]
 	/** Overrides the mailbox's sender name for this message (API sends). */

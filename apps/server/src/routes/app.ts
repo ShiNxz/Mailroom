@@ -79,6 +79,8 @@ const AttachmentT = t.Object({
 	/** base64 */
 	content: t.String(),
 	contentType: t.Optional(t.String({ maxLength: 200 })),
+	/** Content-ID: the file goes inline, shown by <img src="cid:..."> in the html */
+	cid: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
 })
 
 // --- Sending -------------------------------------------------------------------------------------
@@ -125,7 +127,7 @@ interface SendInput {
 	subject: string
 	text?: string
 	html?: string
-	attachments?: { filename: string; content: string; contentType?: string }[]
+	attachments?: { filename: string; content: string; contentType?: string; cid?: string }[]
 	sendAt?: string
 	idempotencyKey?: string
 	replyToMessageId?: string
@@ -154,10 +156,22 @@ async function queueSend(user: ScopedUser, token: ApiTokenRow | null, input: Sen
 	}
 	await limitSends(token)
 
+	const cids = new Set<string>()
 	const files = (input.attachments ?? []).map(a => {
 		const data = Buffer.from(a.content, 'base64')
 		if (!data.length && a.content.length) throw badRequest(`${a.filename}: content must be base64`)
-		return { ...a, data }
+		// "logo", "<logo>" and "cid:logo" all mean the same Content-ID
+		const cid = a.cid
+			?.trim()
+			.replace(/^cid:/i, '')
+			.replace(/^<(.*)>$/, '$1')
+		if (cid !== undefined) {
+			if (!/^[A-Za-z0-9._@+$-]{1,120}$/.test(cid))
+				throw badRequest(`${a.filename}: cid can use letters, digits and . _ @ + $ - (up to 120)`)
+			if (cids.has(cid.toLowerCase())) throw badRequest(`Two attachments have the cid "${cid}"`)
+			cids.add(cid.toLowerCase())
+		}
+		return { ...a, cid, data }
 	})
 	const total = files.reduce((n, f) => n + f.data.length, 0)
 	if (total > env.maxUploadBytes)
@@ -165,20 +179,22 @@ async function queueSend(user: ScopedUser, token: ApiTokenRow | null, input: Sen
 
 	try {
 		const item = await db.transaction(async tx => {
-			const uploads = files.length
-				? await tx
-						.insert(schema.uploads)
-						.values(
-							files.map(f => ({
-								userId: user.id,
-								filename: f.filename.replace(/[\r\n/\\]/g, '_'),
-								contentType: f.contentType || 'application/octet-stream',
-								size: f.data.length,
-								data: f.data,
-							})),
-						)
-						.returning({ id: schema.uploads.id })
-				: []
+			// One insert per file, so each upload id is known to belong to its file (and its cid)
+			const uploads: { id: string; cid?: string }[] = []
+			for (const f of files) {
+				const [row] = await tx
+					.insert(schema.uploads)
+					.values({
+						userId: user.id,
+						filename: f.filename.replace(/[\r\n/\\]/g, '_'),
+						contentType: f.contentType || 'application/octet-stream',
+						size: f.data.length,
+						data: f.data,
+					})
+					.returning({ id: schema.uploads.id })
+				uploads.push({ id: row!.id, cid: f.cid })
+			}
+			const inline = uploads.filter(u => u.cid)
 			const payload: ComposePayload = {
 				mailboxId: input.mailboxId,
 				to: input.to,
@@ -192,6 +208,7 @@ async function queueSend(user: ScopedUser, token: ApiTokenRow | null, input: Sen
 				replyToMessageId: input.replyToMessageId ?? null,
 				headers,
 				attachmentIds: uploads.map(u => u.id),
+				attachmentCids: inline.length ? Object.fromEntries(inline.map(u => [u.id, u.cid!])) : null,
 			}
 			const [row] = await tx
 				.insert(schema.outbox)

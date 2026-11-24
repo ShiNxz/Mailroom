@@ -73,11 +73,22 @@ async function sendOne(item: OutboxRow, syncers: Map<string, MailboxSync>) {
 					.from(schema.uploads)
 					.where(and(inArray(schema.uploads.id, p.attachmentIds), eq(schema.uploads.userId, item.userId)))
 			: []
-		const attachments: { filename: string; content: Buffer; contentType?: string; cid?: string }[] = uploads.map(u => ({
-			filename: u.filename,
-			content: u.data,
-			contentType: u.contentType,
-		}))
+		const attachments: {
+			filename: string
+			content: Buffer
+			contentType?: string
+			cid?: string
+			contentDisposition?: 'inline' | 'attachment'
+		}[] = uploads.map(u => {
+			// An API send's inline image: in multipart/related, shown where the html says <img src="cid:...">
+			const cid = p.attachmentCids?.[u.id]
+			return {
+				filename: u.filename,
+				content: u.data,
+				contentType: u.contentType,
+				...(cid ? { cid, contentDisposition: 'inline' as const } : {}),
+			}
+		})
 
 		if (p.forwardOfMessageId && p.forwardAttachments?.length) {
 			const [fwd] = await db.select().from(schema.messages).where(eq(schema.messages.id, p.forwardOfMessageId))

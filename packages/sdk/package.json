@@ -1,6 +1,6 @@
 {
 	"name": "mailroom-sdk",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Send and receive email through a Mailroom server: mailboxes, sending, replies, and live new-mail events.",
 	"license": "MIT",
 	"type": "module",

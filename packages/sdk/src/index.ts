@@ -81,6 +81,11 @@ export interface Attachment {
 	content?: string | Uint8Array | ArrayBuffer
 	base64?: string
 	contentType?: string
+	/**
+	 * Show it inside the message instead of as a file: give it a Content-ID and use it in the html,
+	 * `<img src="cid:logo">` for `cid: 'logo'`.
+	 */
+	cid?: string
 }
 
 export interface SendOptions {
@@ -216,7 +221,7 @@ function attachmentBody(a: Attachment) {
 	else if (a.content instanceof ArrayBuffer) content = bytesToBase64(new Uint8Array(a.content))
 	else if (a.content) content = bytesToBase64(a.content)
 	else throw new Error(`Attachment ${a.filename} has no content`)
-	return { filename: a.filename, content, contentType: a.contentType }
+	return { filename: a.filename, content, contentType: a.contentType, cid: a.cid }
 }
 
 const toList = (v: AddressInput | undefined) => (v === undefined ? undefined : Array.isArray(v) ? v : [v])

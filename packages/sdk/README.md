@@ -36,6 +36,18 @@ await billing.send({ to: 'dana@client.com', subject: 'Invoice', html: '<p>Attach
 
 Pass an `idempotencyKey` to make retries safe: the same key sends once. `sendAt` schedules a message.
 
+Images inside the message (a logo, icons) are attachments with a `cid`, shown where the html points at them.
+Unlike linked images, mail clients show them without asking:
+
+```ts
+await support.send({
+	to,
+	subject: 'Welcome',
+	html: '<img src="cid:logo" width="120" alt="Example"><p>Hi!</p>',
+	attachments: [{ filename: 'logo.png', content: await readFile('logo.png'), contentType: 'image/png', cid: 'logo' }],
+})
+```
+
 Bulk mail (newsletters, digests) needs a one-click unsubscribe for Gmail and Yahoo. Pass the https URL that
 unsubscribes this recipient when POSTed to, and both headers are set for you:
 
@@ -93,7 +105,7 @@ It is plain HTTP under `/api` with `Authorization: Bearer <token>`:
 | `GET /api/messages?mailbox=&folder=&unread=&q=&limit=&cursor=` | messages, newest first |
 | `GET /api/messages/:id` | one message with its bodies |
 | `PATCH /api/messages/:id` | `{ seen, flagged }` |
-| `POST /api/messages` | send: `{ from, fromName?, to, cc?, bcc?, replyTo?, subject, text?, html?, attachments?: [{ filename, content (base64), contentType? }], headers?, sendAt?, idempotencyKey?, inReplyTo? }` |
+| `POST /api/messages` | send: `{ from, fromName?, to, cc?, bcc?, replyTo?, subject, text?, html?, attachments?: [{ filename, content (base64), contentType?, cid? }], headers?, sendAt?, idempotencyKey?, inReplyTo? }` |
 | `POST /api/messages/:id/reply` | `{ text?, html?, replyAll?, attachments?, ... }` |
 | `GET /api/outbox/:id` | where a send is |
 | `GET /api/stream?after=` | server-sent events (`message.received`, `message.sent`, `message.failed`) |
