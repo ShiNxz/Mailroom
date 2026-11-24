@@ -110,6 +110,8 @@ export function sanitizeComposerHtml(html: string) {
 			img: ['src', 'alt', 'width', 'height', 'style'],
 			font: ['color', 'face', 'size'],
 		},
+		// Quote markers other clients recognise, so they fold the quoted history too
+		allowedClasses: { div: ['gmail_quote', 'gmail_attr'], blockquote: ['gmail_quote'] },
 		allowedSchemes: ['http', 'https', 'mailto', 'tel', 'data', 'cid'],
 	})
 }

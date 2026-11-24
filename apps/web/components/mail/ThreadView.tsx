@@ -1,6 +1,6 @@
 'use client'
 
-import type { Folder, Message, Thread } from '@mailroom/shared'
+import { type Folder, formatAddress, type Message, type Thread } from '@mailroom/shared'
 import { Button, Dropdown, Header, Label, Modal, Separator } from '@heroui/react'
 import { format } from 'date-fns'
 import {
@@ -13,7 +13,9 @@ import {
 	ImageOff,
 	Inbox,
 	MailOpen,
+	ChevronDown,
 	MoreHorizontal,
+	MoreVertical,
 	Paperclip,
 	Reply,
 	ReplyAll,
@@ -22,7 +24,7 @@ import {
 	Star,
 	Trash2,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 import { useCompose } from '@/components/compose/context'
@@ -74,12 +76,19 @@ export function ThreadView({
 		setExpanded(open)
 	}, [data?.threadId, data?.messages.length])
 
-	// Opening a thread marks it read
+	// Opening a thread marks it read, once per opening: also when a refetch shows it unread after it first
+	// came from cache, but not again after "Mark unread"
+	const hasUnread = !!data?.messages.some(m => !m.seen)
+	const markedRead = useRef<string | null>(null)
 	useEffect(() => {
-		if (!data || data.messages.every(m => m.seen)) return
-		const timer = setTimeout(() => void threadAction([threadId], 'read'), 600)
+		if (!data || !hasUnread || markedRead.current === data.threadId) return
+		const id = data.threadId
+		const timer = setTimeout(() => {
+			markedRead.current = id
+			void threadAction([id], 'read')
+		}, 600)
 		return () => clearTimeout(timer)
-	}, [data?.threadId])
+	}, [data?.threadId, hasUnread])
 
 	const act = async (action: ThreadAction, extra?: { folderId?: string; until?: Date }) => {
 		if (REMOVES.includes(action)) onRemoved()
@@ -209,9 +218,9 @@ export function ThreadView({
 			</div>
 
 			<div className="pane-scroll min-h-0 flex-1">
-				<div className="mx-auto max-w-4xl px-4 py-5 sm:px-6">
-					<h1 className="mb-4 text-xl font-semibold leading-snug text-foreground">{data.subject || '(no subject)'}</h1>
-					<div className="flex flex-col gap-2">
+				<div className="px-4 py-5 sm:px-6">
+					<h1 className="mb-2 text-xl font-semibold leading-snug text-foreground">{data.subject || '(no subject)'}</h1>
+					<div className="flex flex-col divide-y divide-separator">
 						{messages.map(m => (
 							<MessageCard
 								key={m.id}
@@ -227,6 +236,8 @@ export function ThreadView({
 								me={myAddresses}
 								showImagesByDefault={me?.user.settings.showImages ?? false}
 								onReply={k => reply(k, m)}
+								starred={starred}
+								onStar={() => void act(starred ? 'unstar' : 'star')}
 							/>
 						))}
 					</div>
@@ -290,6 +301,8 @@ function MessageCard({
 	me,
 	showImagesByDefault,
 	onReply,
+	starred,
+	onStar,
 }: {
 	message: Message
 	expanded: boolean
@@ -297,11 +310,19 @@ function MessageCard({
 	me: Set<string>
 	showImagesByDefault: boolean
 	onReply: (kind: 'reply' | 'replyAll' | 'forward') => void
+	starred: boolean
+	onStar: () => void
 }) {
 	const [allowImages, setAllowImages] = useState(showImagesByDefault)
+	const [details, setDetails] = useState(false)
 	const unsubscribe = m.listUnsubscribe?.match(/<(https:[^>]+)>/)?.[1]
 	const files = m.attachments.filter(
 		a => !(a.inline && a.cid && m.html?.includes(`/attachments/${encodeURIComponent(a.partId)}`)),
+	)
+	const date = new Date(m.date)
+	const when = format(
+		date,
+		date.getFullYear() === new Date().getFullYear() ? 'EEE, MMM d, HH:mm' : 'MMM d, yyyy, HH:mm',
 	)
 
 	if (!expanded)
@@ -309,72 +330,115 @@ function MessageCard({
 			<button
 				type="button"
 				onClick={onToggle}
-				className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-left hover:bg-surface-secondary"
+				className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-default/50"
 			>
-				<PersonAvatar who={m.from} size={28} />
-				<span className={`w-40 shrink-0 truncate text-sm ${m.seen ? '' : 'font-semibold'}`}>{displayName(m.from)}</span>
+				<PersonAvatar who={m.from} size={32} />
+				<span
+					className={`w-44 shrink-0 truncate text-sm ${m.seen ? 'text-foreground' : 'font-semibold text-foreground'}`}
+				>
+					{me.has(m.from.address) ? 'You' : displayName(m.from)}
+				</span>
 				<span className="min-w-0 flex-1 truncate text-sm text-muted">{m.snippet}</span>
 				<span className="shrink-0 text-xs text-muted">{listDate(m.date)}</span>
 			</button>
 		)
 
 	return (
-		<article className="overflow-hidden rounded-xl border border-border bg-surface">
-			<header className="flex items-start gap-3 px-4 pt-4 pb-3">
-				<PersonAvatar who={m.from} />
-				<button type="button" className="min-w-0 flex-1 text-left" onClick={onToggle}>
-					<div className="flex flex-wrap items-baseline gap-x-2">
-						<span className="font-semibold text-foreground">{displayName(m.from)}</span>
-						<span className="truncate text-xs text-muted">&lt;{m.from.address}&gt;</span>
-					</div>
-					<div className="truncate text-xs text-muted">
-						to {whoLine(m.to, me) || 'undisclosed recipients'}
-						{m.cc.length > 0 && `, cc ${whoLine(m.cc, me)}`}
-					</div>
-				</button>
-				<div className="flex shrink-0 items-center gap-1">
-					<span className="mr-1 hidden text-xs text-muted sm:inline" title={fullDate(m.date)}>
-						{format(new Date(m.date), 'MMM d, HH:mm')}
+		<article className="py-5">
+			<header className="flex items-start gap-3">
+				<PersonAvatar who={m.from} size={40} />
+				<div className="min-w-0 flex-1">
+					<button type="button" className="block max-w-full text-left" onClick={onToggle}>
+						<div className="truncate text-sm font-medium text-foreground">
+							{me.has(m.from.address) ? 'You' : displayName(m.from)}
+						</div>
+						<div className="truncate text-xs text-muted">{m.from.address}</div>
+					</button>
+					<button
+						type="button"
+						onClick={() => setDetails(v => !v)}
+						aria-expanded={details}
+						className="inline-flex max-w-full items-center gap-0.5 text-xs text-muted hover:text-foreground"
+					>
+						<span className="truncate">
+							to {whoLine(m.to, me) || 'undisclosed recipients'}
+							{m.cc.length > 0 && `, cc ${whoLine(m.cc, me)}`}
+						</span>
+						<ChevronDown className={`size-3 shrink-0 transition-transform ${details ? 'rotate-180' : ''}`} />
+					</button>
+					{details && (
+						<dl className="mt-2 grid max-w-xl grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border border-separator bg-surface px-3 py-2 text-xs">
+							<dt className="text-muted">From</dt>
+							<dd className="min-w-0 break-words">{formatAddress(m.from)}</dd>
+							{m.replyTo.length > 0 && (
+								<>
+									<dt className="text-muted">Reply to</dt>
+									<dd className="min-w-0 break-words">{m.replyTo.map(formatAddress).join(', ')}</dd>
+								</>
+							)}
+							<dt className="text-muted">To</dt>
+							<dd className="min-w-0 break-words">{m.to.map(formatAddress).join(', ') || 'undisclosed recipients'}</dd>
+							{m.cc.length > 0 && (
+								<>
+									<dt className="text-muted">Cc</dt>
+									<dd className="min-w-0 break-words">{m.cc.map(formatAddress).join(', ')}</dd>
+								</>
+							)}
+							<dt className="text-muted">Date</dt>
+							<dd>{fullDate(m.date)}</dd>
+							<dt className="text-muted">Subject</dt>
+							<dd className="min-w-0 break-words">{m.subject || '(no subject)'}</dd>
+						</dl>
+					)}
+				</div>
+				<div className="flex shrink-0 flex-col items-end gap-1">
+					<span className="text-xs text-muted" title={fullDate(m.date)}>
+						{when}
 					</span>
-					<IconButton label="Reply" onPress={() => onReply('reply')}>
-						<Reply className="size-4" />
-					</IconButton>
-					<Dropdown>
-						<Button isIconOnly variant="ghost" size="sm" aria-label="More">
-							<MoreHorizontal className="size-4" />
-						</Button>
-						<Dropdown.Popover placement="bottom end">
-							<Dropdown.Menu
-								onAction={key => {
-									if (key === 'raw') window.open(`/api/messages/${m.id}/raw`, '_blank')
-									else onReply(key as 'reply' | 'replyAll' | 'forward')
-								}}
-							>
-								<Dropdown.Item id="reply" textValue="Reply">
-									<Reply className="size-4 text-muted" />
-									<Label>Reply</Label>
-								</Dropdown.Item>
-								<Dropdown.Item id="replyAll" textValue="Reply all">
-									<ReplyAll className="size-4 text-muted" />
-									<Label>Reply all</Label>
-								</Dropdown.Item>
-								<Dropdown.Item id="forward" textValue="Forward">
-									<Forward className="size-4 text-muted" />
-									<Label>Forward</Label>
-								</Dropdown.Item>
-								<Separator />
-								<Dropdown.Item id="raw" textValue="Download original">
-									<Download className="size-4 text-muted" />
-									<Label>Download original (.eml)</Label>
-								</Dropdown.Item>
-							</Dropdown.Menu>
-						</Dropdown.Popover>
-					</Dropdown>
+					<div className="flex items-center">
+						<IconButton label="Reply" onPress={() => onReply('reply')}>
+							<Reply className="size-4" />
+						</IconButton>
+						<IconButton label={starred ? 'Unstar' : 'Star'} onPress={onStar}>
+							<Star className={`size-4 ${starred ? 'fill-warning text-warning' : ''}`} />
+						</IconButton>
+						<Dropdown>
+							<Button isIconOnly variant="ghost" size="sm" aria-label="More">
+								<MoreVertical className="size-4" />
+							</Button>
+							<Dropdown.Popover placement="bottom end">
+								<Dropdown.Menu
+									onAction={key => {
+										if (key === 'raw') window.open(`/api/messages/${m.id}/raw`, '_blank')
+										else onReply(key as 'reply' | 'replyAll' | 'forward')
+									}}
+								>
+									<Dropdown.Item id="reply" textValue="Reply">
+										<Reply className="size-4 text-muted" />
+										<Label>Reply</Label>
+									</Dropdown.Item>
+									<Dropdown.Item id="replyAll" textValue="Reply all">
+										<ReplyAll className="size-4 text-muted" />
+										<Label>Reply all</Label>
+									</Dropdown.Item>
+									<Dropdown.Item id="forward" textValue="Forward">
+										<Forward className="size-4 text-muted" />
+										<Label>Forward</Label>
+									</Dropdown.Item>
+									<Separator />
+									<Dropdown.Item id="raw" textValue="Download original">
+										<Download className="size-4 text-muted" />
+										<Label>Download original (.eml)</Label>
+									</Dropdown.Item>
+								</Dropdown.Menu>
+							</Dropdown.Popover>
+						</Dropdown>
+					</div>
 				</div>
 			</header>
 
 			{m.hasRemoteImages && !allowImages && (
-				<div className="mx-4 mb-3 flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs text-muted">
+				<div className="mt-4 flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs text-muted">
 					<ImageOff className="size-3.5 shrink-0" />
 					<span className="flex-1">Remote images are hidden, so the sender can't tell you opened this.</span>
 					<button type="button" className="font-medium text-accent" onClick={() => setAllowImages(true)}>
@@ -383,7 +447,7 @@ function MessageCard({
 				</div>
 			)}
 
-			<div className="px-4 pb-4">
+			<div className="mt-4">
 				{m.html ? (
 					<EmailFrame html={m.html} allowImages={allowImages} />
 				) : (
@@ -392,7 +456,7 @@ function MessageCard({
 			</div>
 
 			{files.length > 0 && (
-				<div className="flex flex-wrap gap-2 border-t border-separator px-4 py-3">
+				<div className="mt-4 flex flex-wrap gap-2">
 					{files.map(a => (
 						<a
 							key={a.partId}
@@ -410,7 +474,7 @@ function MessageCard({
 			)}
 
 			{unsubscribe && (
-				<div className="border-t border-separator px-4 py-2 text-right">
+				<div className="mt-3">
 					<a
 						href={unsubscribe}
 						target="_blank"

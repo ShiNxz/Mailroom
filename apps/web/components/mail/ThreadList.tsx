@@ -5,6 +5,7 @@ import { Checkbox } from '@heroui/react'
 import { Archive, Clock, MailOpen, Paperclip, Star, Trash2 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { snoozeOptions, threadAction } from '@/lib/actions'
+import { PersonAvatar } from '@/components/ui'
 import { displayName, listDate } from '@/lib/format'
 
 export function ThreadList({
@@ -33,6 +34,7 @@ export function ThreadList({
 	onRemoved: (id: string) => void
 }) {
 	const sentinel = useRef<HTMLDivElement>(null)
+	const selecting = checked.size > 0
 
 	useEffect(() => {
 		const el = sentinel.current
@@ -58,33 +60,29 @@ export function ThreadList({
 							onClick={() => onOpen(t)}
 							onKeyDown={e => e.key === 'Enter' && onOpen(t)}
 							data-thread={t.threadId}
-							className={`group relative flex cursor-pointer gap-3 border-b border-separator py-2.5 pr-3 pl-4 outline-none transition-colors ${
+							className={`group relative flex cursor-pointer gap-3 border-b border-separator px-4 py-3 outline-none transition-colors ${
 								selected ? 'bg-accent/10' : isChecked ? 'bg-default/60' : 'hover:bg-default/50'
 							}`}
 						>
-							{t.unread && (
-								// Level with the sender line (py-2.5 plus half of its 20px line height), in the left gutter
-								<span className="absolute top-5 left-1.5 size-1.5 -translate-y-1/2 rounded-full bg-accent" />
-							)}
-							<div className="flex shrink-0 flex-col items-center gap-1 pt-0.5" onClick={e => e.stopPropagation()}>
-								<Checkbox aria-label="Select" isSelected={isChecked} onChange={on => onCheck(t.threadId, on)}>
-									<Checkbox.Control>
-										<Checkbox.Indicator />
-									</Checkbox.Control>
-								</Checkbox>
-								<button
-									type="button"
-									aria-label={t.starred ? 'Unstar' : 'Star'}
-									onClick={() => void threadAction([t.threadId], t.starred ? 'unstar' : 'star')}
-									className={`rounded p-0.5 ${t.starred ? 'text-warning' : 'text-muted/50 opacity-0 group-hover:opacity-100'}`}
+							{/* The sender's avatar; a checkbox on hover, and on every row while some are picked */}
+							<div className="relative size-10 shrink-0" onClick={e => e.stopPropagation()}>
+								<div className={selecting ? 'hidden' : 'group-hover:hidden'}>
+									<PersonAvatar who={t.from} size={40} />
+								</div>
+								<div
+									className={`absolute inset-0 items-center justify-center ${selecting ? 'flex' : 'hidden group-hover:flex'}`}
 								>
-									<Star className={`size-3.5 ${t.starred ? 'fill-warning' : ''}`} />
-								</button>
+									<Checkbox aria-label="Select" isSelected={isChecked} onChange={on => onCheck(t.threadId, on)}>
+										<Checkbox.Control>
+											<Checkbox.Indicator />
+										</Checkbox.Control>
+									</Checkbox>
+								</div>
 							</div>
 							<div className="min-w-0 flex-1">
-								<div className="flex items-baseline gap-2">
+								<div className="flex items-center gap-2">
 									<span
-										className={`min-w-0 flex-1 truncate text-sm ${t.unread ? 'font-semibold text-foreground' : 'text-foreground/80'}`}
+										className={`min-w-0 flex-1 truncate text-[15px] leading-5 ${t.unread ? 'font-semibold text-foreground' : 'text-foreground'}`}
 									>
 										{participantsLine(t)}
 										{t.count > 1 && <span className="ml-1.5 text-xs font-normal text-muted">{t.count}</span>}
@@ -101,9 +99,14 @@ export function ThreadList({
 											listDate(t.date)
 										)}
 									</span>
+									<span
+										className={`size-2 shrink-0 rounded-full ${t.unread ? 'bg-accent' : 'bg-transparent'} group-hover:invisible`}
+									>
+										{t.unread && <span className="sr-only">Unread</span>}
+									</span>
 									{/* Floats over the date so hovering never changes the row height */}
 									<span
-										className="absolute top-1.5 right-2 z-10 hidden items-center gap-0.5 rounded-lg border border-separator bg-surface/95 p-0.5 shadow-sm backdrop-blur group-hover:flex"
+										className="absolute top-2 right-3 z-10 hidden items-center gap-0.5 rounded-lg border border-separator bg-surface/95 p-0.5 shadow-sm backdrop-blur group-hover:flex"
 										onClick={e => e.stopPropagation()}
 									>
 										<HoverAction
@@ -143,12 +146,14 @@ export function ThreadList({
 										</HoverAction>
 									</span>
 								</div>
-								<div className={`truncate text-sm ${t.unread ? 'text-foreground' : 'text-foreground/80'}`}>
+								<div
+									className={`truncate text-sm leading-5 ${t.unread ? 'font-medium text-foreground' : 'text-muted'}`}
+								>
 									{t.subject || '(no subject)'}
 								</div>
 								<div className="flex items-center gap-1.5">
-									<span className="min-w-0 flex-1 truncate text-xs text-muted">{t.snippet}</span>
-									{t.hasAttachments && <Paperclip className="size-3 shrink-0 text-muted" />}
+									<span className="min-w-0 flex-1 truncate text-sm leading-5 text-muted">{t.snippet}</span>
+									{t.hasAttachments && <Paperclip className="size-3.5 shrink-0 text-muted" />}
 									{owner && (
 										<span
 											className="inline-flex max-w-[45%] shrink-0 items-center gap-1 truncate rounded-md bg-default px-1.5 py-px text-[10px] text-muted"
@@ -158,6 +163,17 @@ export function ThreadList({
 											<span className="truncate">{owner.address.split('@')[1]}</span>
 										</span>
 									)}
+									<button
+										type="button"
+										aria-label={t.starred ? 'Unstar' : 'Star'}
+										onClick={e => {
+											e.stopPropagation()
+											void threadAction([t.threadId], t.starred ? 'unstar' : 'star')
+										}}
+										className={`-mr-0.5 shrink-0 rounded p-0.5 transition-colors ${t.starred ? 'text-warning' : 'text-muted/60 hover:text-foreground'}`}
+									>
+										<Star className={`size-4 ${t.starred ? 'fill-warning' : ''}`} />
+									</button>
 								</div>
 							</div>
 						</div>

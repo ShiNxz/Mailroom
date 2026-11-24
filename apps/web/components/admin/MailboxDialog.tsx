@@ -238,13 +238,11 @@ export function MailboxDialog({
 					</Modal.Header>
 					<Modal.Body className="flex flex-col gap-4">
 						{step === 'address' ? (
-							<>
-								<TextField value={form.address} onChange={v => set('address', v.trim())} type="email" autoFocus>
-									<Label>Email address</Label>
-									<Input placeholder="hello@yourdomain.com" />
-									<Description>We look up the server settings for you.</Description>
-								</TextField>
-							</>
+							<TextField value={form.address} onChange={v => set('address', v.trim())} type="email" autoFocus>
+								<Label>Email address</Label>
+								<Input placeholder="hello@yourdomain.com" />
+								<Description>We look up the server settings for you.</Description>
+							</TextField>
 						) : (
 							<>
 								{detected && (

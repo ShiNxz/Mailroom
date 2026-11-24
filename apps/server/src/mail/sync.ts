@@ -365,6 +365,9 @@ export class MailboxSync {
 	// --- Folder sync ---------------------------------------------------------------------------
 
 	private async syncFolder(client: ImapFlow, folder: FolderRow) {
+		// Already selected: no new SELECT, so UIDNEXT is whatever it was when it was opened. EXISTS
+		// updates arrive on their own, UIDNEXT doesn't, so look above the last UID instead of trusting it.
+		const wasOpen = client.mailbox && (client.mailbox as MailboxObject).path === folder.path
 		let lock: Awaited<ReturnType<ImapFlow['getMailboxLock']>>
 		try {
 			lock = await client.getMailboxLock(folder.path)
@@ -373,6 +376,7 @@ export class MailboxSync {
 			return
 		}
 		try {
+			if (wasOpen) await client.noop()
 			const box = client.mailbox as MailboxObject
 			const uidValidity = Number(box.uidValidity)
 			let f = folder
@@ -414,7 +418,7 @@ export class MailboxSync {
 						backfillDone: from === 1,
 					})
 					.where(eq(schema.folders.id, f.id))
-			} else if (box.uidNext > f.maxUid + 1) {
+			} else if (box.uidNext > f.maxUid + 1 || wasOpen) {
 				const fetched = await this.fetchMessages(client, f, `${f.maxUid + 1}:*`, true)
 				newMessages = fetched.inserted
 				const top = Math.max(f.maxUid, ...fetched.uids, box.uidNext - 1)

@@ -134,7 +134,8 @@ export function replyDraft(
 		to,
 		cc,
 		subject: /^re:/i.test(subject) ? subject : `Re: ${subject}`,
-		quoted: `<div>On ${esc(fullDate(m.date))}, ${addr(m.from)} wrote:</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${m.html ?? ''}</blockquote>`,
+		// Gmail's own quote markup, so Gmail (and Mailroom) fold the history away in the reply
+		quoted: `<div class="gmail_quote"><div class="gmail_attr">On ${esc(fullDate(m.date))}, ${addr(m.from)} wrote:</div><blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${m.html ?? ''}</blockquote></div>`,
 		replyToMessageId: m.id,
 	}
 }

@@ -1,4 +1,5 @@
 import type { Folder, Project, User } from '@mailroom/shared'
+import { useEffect, useRef } from 'react'
 import useSWR, { mutate } from 'swr'
 
 export class ApiError extends Error {
@@ -54,8 +55,23 @@ export function useBootstrap() {
 	return useSWR<Bootstrap>('/bootstrap', fetcher, { revalidateOnFocus: true, dedupingInterval: 1000 })
 }
 
+// Paged lists (useSWRInfinite) live under "$inf$" keys, which SWR's filter mutate skips on purpose, so
+// they register here to hear about refreshes. Without this, a list only refreshed on window focus.
+const listRefreshers = new Set<() => void>()
+
+export function useListRefresh(refresh: () => void) {
+	const ref = useRef(refresh)
+	ref.current = refresh
+	useEffect(() => {
+		const fn = () => ref.current()
+		listRefreshers.add(fn)
+		return () => void listRefreshers.delete(fn)
+	}, [])
+}
+
 /** Revalidates every cached thread list (and optionally open threads). */
 export function refreshLists(alsoThreads = false) {
+	for (const fn of listRefreshers) fn()
 	void mutate(
 		key => typeof key === 'string' && (key.startsWith('/threads?') || (alsoThreads && key.startsWith('/threads/'))),
 	)

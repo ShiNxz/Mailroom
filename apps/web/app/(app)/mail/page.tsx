@@ -11,7 +11,7 @@ import { ThreadList } from '@/components/mail/ThreadList'
 import { ThreadView } from '@/components/mail/ThreadView'
 import { EmptyState, IconButton, Loading, StatusDot } from '@/components/ui'
 import { threadAction } from '@/lib/actions'
-import { fetcher, refreshBootstrap, useBootstrap } from '@/lib/api'
+import { fetcher, refreshBootstrap, useBootstrap, useListRefresh } from '@/lib/api'
 
 const VIEW_TITLES: Record<string, string> = {
 	inbox: 'Inbox',
@@ -86,6 +86,7 @@ function MailPage() {
 		fetcher,
 		{ revalidateFirstPage: true, revalidateOnFocus: true },
 	)
+	useListRefresh(() => void mutate())
 	const threads = useMemo(
 		() => (data ?? []).flatMap(p => p.threads).filter(t => !hidden.has(t.threadId)),
 		[data, hidden],

@@ -482,7 +482,15 @@ export const mailRoutes = new Elysia()
 		const unique = new Map<string, (typeof rows)[number]>()
 		for (const r of rows.sort((a, b) => rank(a.special) - rank(b.special))) {
 			const key = r.m.messageId ?? r.m.id
-			if (!unique.has(key)) unique.set(key, r)
+			const kept = unique.get(key)
+			if (!kept) unique.set(key, { ...r, m: { ...r.m } })
+			// Flags count across every copy, like the list does: one unread copy (say in the inbox, while the
+			// shown copy is the read one in Sent) keeps the message unread, so opening it marks it read
+			else {
+				kept.m.seen &&= r.m.seen
+				kept.m.flagged ||= r.m.flagged
+				kept.m.answered ||= r.m.answered
+			}
 		}
 		const messages = [...unique.values()].map(r => r.m).sort((a, b) => a.date.getTime() - b.date.getTime())
 		return {
