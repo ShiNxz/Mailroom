@@ -15,6 +15,13 @@
       "when": 1795475974711,
       "tag": "0001_branding",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795523652043,
+      "tag": "0002_security_and_api",
+      "breakpoints": true
     }
   ]
 }

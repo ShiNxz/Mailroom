@@ -1,6 +1,7 @@
 import { isAdminRole } from '@mailroom/shared'
 import { and, eq, inArray } from 'drizzle-orm'
 import type { UserRow } from './auth'
+import type { ScopedUser } from './context'
 import { db, schema } from './db'
 import { HttpError } from './lib/http'
 
@@ -15,8 +16,28 @@ export function requireAdmin(user: UserRow) {
 	if (!isAdmin(user)) throw new HttpError(403, 'Only admins can do that')
 }
 
-/** Ids of every mailbox the user can read and send from. */
-export async function accessibleMailboxIds(user: UserRow): Promise<string[]> {
+/**
+ * Ids of every mailbox the user can read and send from. When an API token is calling, its scope narrows
+ * that further: a token never reaches a mailbox its owner can't, so taking access away from a person
+ * takes it from their tokens too.
+ */
+export async function accessibleMailboxIds(user: ScopedUser): Promise<string[]> {
+	const ids = await ownerMailboxIds(user)
+	const scope = user.tokenScope
+	if (!scope || scope.type === 'all') return ids
+	const inProjects = scope.projectIds.length
+		? (
+				await db
+					.select({ id: schema.mailboxes.id })
+					.from(schema.mailboxes)
+					.where(inArray(schema.mailboxes.projectId, scope.projectIds))
+			).map(r => r.id)
+		: []
+	const allowed = new Set([...inProjects, ...scope.mailboxIds])
+	return ids.filter(id => allowed.has(id))
+}
+
+async function ownerMailboxIds(user: UserRow): Promise<string[]> {
 	if (isAdmin(user)) {
 		const rows = await db.select({ id: schema.mailboxes.id }).from(schema.mailboxes)
 		return rows.map(r => r.id)
@@ -44,14 +65,23 @@ export async function accessibleMailboxIds(user: UserRow): Promise<string[]> {
 	return [...ids]
 }
 
-export async function assertMailboxAccess(user: UserRow, mailboxId: string) {
+export async function assertMailboxAccess(user: ScopedUser, mailboxId: string) {
 	const ids = await accessibleMailboxIds(user)
 	if (!ids.includes(mailboxId)) throw new HttpError(404, 'Mailbox not found')
 }
 
 /** Project ids the user can see (has at least one mailbox in, or was added to). */
-export async function accessibleProjectIds(user: UserRow): Promise<string[] | 'all'> {
-	if (isAdmin(user)) return 'all'
+export async function accessibleProjectIds(user: ScopedUser): Promise<string[] | 'all'> {
+	if (isAdmin(user) && !user.tokenScope) return 'all'
+	if (user.tokenScope) {
+		const ids = await accessibleMailboxIds(user)
+		if (!ids.length) return []
+		const rows = await db
+			.select({ p: schema.mailboxes.projectId })
+			.from(schema.mailboxes)
+			.where(inArray(schema.mailboxes.id, ids))
+		return [...new Set(rows.map(r => r.p))]
+	}
 	const grants = await db
 		.select({ projectId: schema.projectMembers.projectId })
 		.from(schema.projectMembers)

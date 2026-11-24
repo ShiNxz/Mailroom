@@ -5,7 +5,8 @@ import type { NextRequest } from 'next/server'
 // domain or CORS. API_URL is read at runtime: changing it needs a restart, not a rebuild.
 const API_URL = (process.env.API_URL ?? 'http://localhost:3001').replace(/\/$/, '')
 
-const FORWARDED_REQUEST_HEADERS = ['cookie', 'content-type', 'authorization', 'accept', 'user-agent', 'last-event-id']
+// origin: the API refuses cross-site writes, and passkeys are checked against it
+const FORWARDED_REQUEST_HEADERS = ['cookie', 'content-type', 'authorization', 'accept', 'user-agent', 'last-event-id', 'origin']
 // fetch() already decoded the body, and Node sets its own framing headers
 const DROPPED_RESPONSE_HEADERS = new Set([
 	'connection',

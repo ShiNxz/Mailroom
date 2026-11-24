@@ -17,6 +17,7 @@
 		"@mailroom/shared": "workspace:*",
 		"@react-aria/ssr": "3.10.1",
 		"@react-aria/utils": "3.34.1",
+		"@simplewebauthn/browser": "14.0.0",
 		"@tiptap/extension-image": "3.35.0",
 		"@tiptap/extension-placeholder": "3.35.0",
 		"@tiptap/pm": "3.35.0",

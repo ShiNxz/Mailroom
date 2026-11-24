@@ -2,7 +2,7 @@ import { type Branding, DEFAULT_BRANDING } from '@mailroom/shared'
 import { eq } from 'drizzle-orm'
 import { Elysia, t } from 'elysia'
 import { requireAdmin } from '../access'
-import { authed } from '../context'
+import { sessionAuth } from '../context'
 import { db, schema } from '../db'
 import { badRequest } from '../lib/http'
 import { publishEvent } from '../lib/redis'
@@ -39,7 +39,7 @@ function cleanLogoUrl(input: string | null | undefined): string | null {
 
 export const brandingRoutes = new Elysia()
 	.get('/branding', () => getBranding())
-	.use(authed)
+	.use(sessionAuth)
 	.put(
 		'/admin/branding',
 		async ({ user, body }) => {

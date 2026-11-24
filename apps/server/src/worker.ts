@@ -1,10 +1,13 @@
 // The worker: keeps every mailbox in sync over IMAP (IDLE push + history backfill), applies changes
-// made in the app, sends the outbox (scheduled and undo-able sends) and re-checks domain health.
+// made in the app, sends the outbox (scheduled and undo-able sends), delivers app webhooks and
+// re-checks domain health.
 // Exactly one runs: a Postgres advisory lock makes a second copy (e.g. during a deploy) wait.
 
 import { and, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm'
 import { db, runMigrations, schema, sqlClient } from './db'
 import { env } from './env'
+import { pruneMailEvents } from './events/mail-events'
+import { deliverWebhooks } from './events/webhooks'
 import { checkDomain } from './health/dns'
 import { errorMessage, log } from './lib/log'
 import { COMMANDS_CHANNEL, publishEvent, subscribe, type WorkerCommand } from './lib/redis'
@@ -107,6 +110,22 @@ subscribe<WorkerCommand>(COMMANDS_CHANNEL, command => {
 // The outbox is also polled, so scheduled sends go out on time without any poke
 setInterval(() => void runOutbox(), 3000)
 
+// --- Webhooks for apps ------------------------------------------------------------------------------
+
+let webhooksRunning = false
+async function runWebhooks() {
+	if (webhooksRunning) return
+	webhooksRunning = true
+	try {
+		await deliverWebhooks()
+	} catch (err) {
+		log.error('webhook deliveries failed', { err: errorMessage(err) })
+	} finally {
+		webhooksRunning = false
+	}
+}
+setInterval(() => void runWebhooks(), 2000)
+
 // --- Domain health and cleanup ---------------------------------------------------------------------
 
 async function recheckDomains() {
@@ -147,6 +166,7 @@ async function cleanup() {
 				lt(schema.outbox.createdAt, new Date(Date.now() - 30 * day)),
 			),
 		)
+	await pruneMailEvents()
 	// Snoozes that ended: clear them so the thread is a normal one again (sort_at keeps it on top)
 	await db
 		.update(schema.messages)

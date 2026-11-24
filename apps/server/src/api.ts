@@ -7,12 +7,15 @@ import { env } from './env'
 import { HttpError } from './lib/http'
 import { log } from './lib/log'
 import { adminRoutes } from './routes/admin'
+import { appRoutes } from './routes/app'
 import { authRoutes } from './routes/auth'
 import { brandingRoutes } from './routes/branding'
 import { composeRoutes } from './routes/compose'
 import { eventRoutes } from './routes/events'
 import { mailRoutes } from './routes/mail'
 import { prefsRoutes } from './routes/prefs'
+import { securityRoutes } from './routes/security'
+import { tokenRoutes } from './routes/tokens'
 
 await runMigrations()
 
@@ -20,7 +23,7 @@ const app = new Elysia()
 	.onError(({ error, code, set }) => {
 		if (error instanceof HttpError) {
 			set.status = error.status
-			return { error: error.message }
+			return error.code ? { error: error.message, code: error.code } : { error: error.message }
 		}
 		if (code === 'VALIDATION') {
 			set.status = 400
@@ -42,12 +45,15 @@ const app = new Elysia()
 	})
 	.get('/health', () => ({ ok: true }))
 	.use(authRoutes)
+	.use(securityRoutes)
 	.use(brandingRoutes)
 	.use(adminRoutes)
 	.use(mailRoutes)
 	.use(composeRoutes)
 	.use(prefsRoutes)
 	.use(eventRoutes)
+	.use(tokenRoutes)
+	.use(appRoutes)
 	.listen({ port: env.port, hostname: '0.0.0.0', maxRequestBodySize: env.maxUploadBytes + 1024 * 1024, idleTimeout: 0 })
 
 log.info('api listening', { port: app.server?.port })

@@ -1,11 +1,12 @@
 import type { ProjectGrant, Role, UserWithAccess } from '@mailroom/shared'
-import { and, eq, inArray, max } from 'drizzle-orm'
+import { and, count, eq, inArray, max } from 'drizzle-orm'
 import { Elysia, t } from 'elysia'
 import { requireAdmin } from '../access'
 import { hashPassword, toUser, type UserRow, validatePassword } from '../auth'
-import { authed } from '../context'
+import { sessionAuth } from '../context'
 import { db, schema } from '../db'
 import { checkDomain } from '../health/dns'
+import { resetSignIn } from '../security/factors'
 import { encryptSecret } from '../lib/crypto'
 import { HttpError, notFound } from '../lib/http'
 import { publishEvent, sendCommand } from '../lib/redis'
@@ -63,6 +64,24 @@ async function grantsOf(userIds: string[]): Promise<Map<string, ProjectGrant[]>>
 		out.set(p.userId, list)
 	}
 	return out
+}
+
+/** Users as the admin pages show them: their access and whether they set up a second factor. */
+async function withAccess(users: UserRow[]): Promise<UserWithAccess[]> {
+	const ids = users.map(u => u.id)
+	const grants = await grantsOf(ids)
+	const passkeys = ids.length
+		? await db
+				.select({ userId: schema.passkeys.userId, n: count() })
+				.from(schema.passkeys)
+				.where(inArray(schema.passkeys.userId, ids))
+				.groupBy(schema.passkeys.userId)
+		: []
+	return users.map(u => ({
+		...toUser(u),
+		grants: grants.get(u.id) ?? [],
+		signIn: { passkeys: passkeys.find(p => p.userId === u.id)?.n ?? 0, totp: !!u.totpEnabledAt },
+	}))
 }
 
 async function saveGrants(userId: string, grants: ProjectGrant[]) {
@@ -134,14 +153,13 @@ async function domainForAddress(projectId: string, address: string) {
 }
 
 export const adminRoutes = new Elysia({ prefix: '/admin' })
-	.use(authed)
+	.use(sessionAuth)
 	.onBeforeHandle(({ user }) => requireAdmin(user))
 
 	// --- Users -------------------------------------------------------------------------------
 	.get('/users', async () => {
 		const users = await db.select().from(schema.users).orderBy(schema.users.createdAt)
-		const grants = await grantsOf(users.map(u => u.id))
-		return { users: users.map<UserWithAccess>(u => ({ ...toUser(u), grants: grants.get(u.id) ?? [] })) }
+		return { users: await withAccess(users) }
 	})
 
 	.post(
@@ -158,8 +176,7 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
 				.values({ email, name: body.name.trim(), passwordHash: await hashPassword(body.password), role: body.role })
 				.returning()
 			await saveGrants(created!.id, body.grants)
-			const grants = await grantsOf([created!.id])
-			return { user: { ...toUser(created!), grants: grants.get(created!.id) ?? [] } }
+			return { user: (await withAccess([created!]))[0]! }
 		},
 		{
 			body: t.Object({
@@ -195,8 +212,7 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
 				: [target]
 			if (body.disabled || body.password) await db.delete(schema.sessions).where(eq(schema.sessions.userId, target.id))
 			if (body.grants) await saveGrants(target.id, body.grants)
-			const grants = await grantsOf([target.id])
-			return { user: { ...toUser(updated!), grants: grants.get(target.id) ?? [] } }
+			return { user: (await withAccess([updated!]))[0]! }
 		},
 		{
 			body: t.Object({
@@ -208,6 +224,17 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
 			}),
 		},
 	)
+
+	// Lost phone or passkey: removes every passkey, the authenticator app and recovery codes, and signs
+	// the person out everywhere. They set up a new factor at their next sign-in.
+	.post('/users/:id/reset-sign-in', async ({ user, params }) => {
+		const [target] = await db.select().from(schema.users).where(eq(schema.users.id, params.id))
+		if (!target) throw notFound('No such user')
+		if (target.id === user.id) throw new HttpError(400, 'Manage your own sign-in methods in Settings')
+		assertCanManageUser(user, target)
+		await resetSignIn(target.id)
+		return { user: (await withAccess([{ ...target, totpSecret: null, totpEnabledAt: null }]))[0]! }
+	})
 
 	.delete('/users/:id', async ({ user, params }) => {
 		const [target] = await db.select().from(schema.users).where(eq(schema.users.id, params.id))

@@ -48,6 +48,8 @@ export interface ProjectGrant {
 
 export interface UserWithAccess extends User {
 	grants: ProjectGrant[]
+	/** Second factors the person has set up. None yet means they get the setup screen at their next sign-in. */
+	signIn: { passkeys: number; totp: boolean }
 }
 
 export type MailboxStatus = 'connecting' | 'syncing' | 'idle' | 'error' | 'paused'
@@ -322,6 +324,141 @@ export type ServerEvent =
 	| { type: 'outbox'; mailboxId: string; id: string; status: OutboxStatus; error: string | null }
 	| { type: 'access' }
 	| { type: 'branding' }
+
+// --- Sign-in security ------------------------------------------------------------------------
+
+export type MfaMethod = 'passkey' | 'totp' | 'recovery'
+
+/** What /auth/login answers: signed in, a second factor to give, or a factor to set up first. */
+export interface LoginResult {
+	user?: User
+	/** The password was right; finish with one of these methods and the ticket. */
+	mfa?: { ticket: string; methods: MfaMethod[] }
+	/** Signed in, but only far enough to set up a passkey or an authenticator app. */
+	setupRequired?: boolean
+}
+
+export interface PasskeyInfo {
+	id: string
+	name: string
+	createdAt: string
+	lastUsedAt: string | null
+}
+
+export interface SessionInfo {
+	id: string
+	label: string | null
+	createdAt: string
+	lastSeenAt: string
+	current: boolean
+	verified: boolean
+}
+
+export interface SecurityStatus {
+	/** This session passed a second factor */
+	verified: boolean
+	passkeys: PasskeyInfo[]
+	totp: boolean
+	recoveryCodes: number
+	/** The account has a passkey or an authenticator app */
+	hasFactor: boolean
+}
+
+// --- API tokens -----------------------------------------------------------------------------
+
+export type TokenScope = { type: 'all' } | { type: 'selected'; projectIds: string[]; mailboxIds: string[] }
+
+export interface ApiToken {
+	id: string
+	name: string
+	prefix: string
+	canRead: boolean
+	canSend: boolean
+	scope: TokenScope
+	webhookUrl: string | null
+	expiresAt: string | null
+	lastUsedAt: string | null
+	createdAt: string
+	revokedAt: string | null
+}
+
+/** Shown once, right after creating a token. */
+export interface NewApiToken {
+	token: ApiToken
+	secret: string
+	webhookSecret: string | null
+}
+
+// --- App API (what tokens and the SDK see) ------------------------------------------------------
+
+export interface ApiMailbox {
+	id: string
+	address: string
+	/** The sender name mail goes out with unless a send overrides it */
+	name: string
+	projectId: string
+	project: string
+}
+
+export interface ApiAttachment {
+	partId: string
+	filename: string
+	contentType: string
+	size: number
+}
+
+export interface ApiMessage {
+	id: string
+	mailboxId: string
+	/** The mailbox address this message is in */
+	mailbox: string
+	folder: string
+	threadId: string
+	/** The Message-ID header */
+	messageId: string | null
+	inReplyTo: string | null
+	from: Address
+	to: Address[]
+	cc: Address[]
+	replyTo: Address[]
+	subject: string
+	date: string
+	snippet: string
+	seen: boolean
+	flagged: boolean
+	answered: boolean
+	attachments: ApiAttachment[]
+	/** Bodies are in single-message responses and events; lists leave them out */
+	text?: string
+	/** The HTML as received, not sanitized */
+	html?: string | null
+}
+
+export type ApiSendStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled'
+
+export interface ApiSend {
+	id: string
+	mailboxId: string
+	status: ApiSendStatus
+	subject: string
+	to: Address[]
+	sendAt: string
+	sentAt: string | null
+	error: string | null
+	/** The Message-ID header, once sent */
+	messageId: string | null
+}
+
+interface ApiEventBase {
+	/** Pass as `after` (or Last-Event-ID) to continue from here */
+	id: string
+	createdAt: string
+	mailbox: { id: string; address: string }
+}
+
+export type ApiEvent =
+	| (ApiEventBase & { type: 'message.received'; message: ApiMessage })
+	| (ApiEventBase & { type: 'message.sent' | 'message.failed'; send: ApiSend })
 
 /** How the app names and shows itself. Set by admins in Settings; logoUrl null shows the default mark. */
 export interface Branding {

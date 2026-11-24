@@ -22,6 +22,10 @@ export const env = {
 	/** How long a web session lasts without use. */
 	sessionDays: Number(process.env.SESSION_DAYS ?? 30),
 	logLevel: process.env.LOG_LEVEL ?? 'info',
+	/** The web app's address (https://mail.example.com). Passkeys are bound to its host name. */
+	publicUrl: process.env.PUBLIC_URL?.replace(/\/$/, '') || null,
+	/** Webhooks to private and loopback addresses are refused unless this is set (local dev only). */
+	webhookAllowPrivate: process.env.WEBHOOK_ALLOW_PRIVATE === '1',
 	/** When set, the first-run setup (creating the owner) needs this token, so a fresh install can't be claimed by a stranger. */
 	setupToken: process.env.SETUP_TOKEN || null,
 }

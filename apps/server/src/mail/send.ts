@@ -3,6 +3,7 @@ import MailComposer from 'nodemailer/lib/mail-composer'
 import { db, schema } from '../db'
 import { randomToken } from '../lib/ids'
 import { errorMessage, log } from '../lib/log'
+import { recordMailEvent } from '../events/mail-events'
 import { publishEvent } from '../lib/redis'
 import { describeConnectionError, settingsOf, smtpTransport } from './connect'
 import { htmlToText } from './parse'
@@ -95,15 +96,17 @@ async function sendOne(item: OutboxRow, syncers: Map<string, MailboxSync>) {
 
 		const domain = mailbox.address.split('@')[1] ?? 'localhost'
 		const messageId = `<${randomToken(18)}@${domain}>`
-		const html = sanitizeComposerHtml(p.html)
+		// API sends may be plain text only; the web composer always sends HTML
+		const html = p.html.trim() ? sanitizeComposerHtml(p.html) : null
 		const composer = new MailComposer({
-			from: { name: mailbox.displayName, address: mailbox.address },
+			from: { name: p.fromName?.trim() || mailbox.displayName, address: mailbox.address },
+			replyTo: p.replyTo?.length ? p.replyTo.map(a => ({ name: a.name, address: a.address })) : undefined,
 			to: p.to.map(a => ({ name: a.name, address: a.address })),
 			cc: p.cc.map(a => ({ name: a.name, address: a.address })),
 			bcc: p.bcc.map(a => ({ name: a.name, address: a.address })),
 			subject: p.subject,
-			html,
-			text: htmlToText(html),
+			html: html ?? undefined,
+			text: p.text ?? (html ? htmlToText(html) : ''),
 			messageId,
 			inReplyTo: original?.messageId ?? undefined,
 			references: references.length ? references.join(' ') : undefined,
@@ -134,6 +137,7 @@ async function sendOne(item: OutboxRow, syncers: Map<string, MailboxSync>) {
 			.set({ status: 'sent', sentAt: new Date(), error: null, messageId })
 			.where(eq(schema.outbox.id, item.id))
 		await publishEvent({ type: 'outbox', mailboxId: mailbox.id, id: item.id, status: 'sent', error: null })
+		await recordMailEvent({ type: 'message.sent', mailboxId: mailbox.id, outboxId: item.id })
 
 		if (mailbox.saveSent && syncer) {
 			syncer.appendSent(rawWithBcc).catch(err => l.warn('could not save to Sent', { err }))
@@ -175,6 +179,13 @@ async function sendOne(item: OutboxRow, syncers: Map<string, MailboxSync>) {
 			status: permanent ? 'failed' : 'queued',
 			error: message,
 		})
+		if (permanent)
+			await recordMailEvent({
+				type: 'message.failed',
+				mailboxId: item.mailboxId,
+				outboxId: item.id,
+				error: message,
+			}).catch(e => l.warn('could not record the failure event', { err: errorMessage(e) }))
 	}
 }
 

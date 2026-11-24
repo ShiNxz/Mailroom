@@ -3,6 +3,7 @@ import { and, asc, count, eq, gte, inArray, notInArray, sql } from 'drizzle-orm'
 import type { FetchMessageObject, FetchQueryObject, ImapFlow, MailboxObject } from 'imapflow'
 import { db, schema } from '../db'
 import { errorMessage, log } from '../lib/log'
+import { recordMailEvent } from '../events/mail-events'
 import { publishEvent } from '../lib/redis'
 import { describeConnectionError, imapClient, type MailboxRow, settingsOf } from './connect'
 import { walkStructure } from './parse'
@@ -441,6 +442,10 @@ export class MailboxSync {
 						: undefined
 				await publishEvent({ type: 'messages', mailboxId: this.mailbox.id, folderId: f.id, newInbox })
 			}
+			// New mail for apps (stream and webhooks). Not on the first look at the inbox: that is history.
+			if (f.specialUse === 'inbox' && newMessages.length && f.maxUid > 0)
+				for (const m of newMessages)
+					await recordMailEvent({ type: 'message.received', mailboxId: this.mailbox.id, messageId: m.id })
 		} finally {
 			lock.release()
 		}

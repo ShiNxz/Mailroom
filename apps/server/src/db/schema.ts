@@ -47,6 +47,9 @@ export const users = pgTable('users', {
 	role: text('role').$type<Role>().notNull().default('member'),
 	settings: jsonb('settings').$type<UserSettings>().notNull().default({}),
 	disabled: boolean('disabled').notNull().default(false),
+	/** Authenticator app (TOTP) secret, encrypted with APP_SECRET. Set while enrolling; enabled once confirmed. */
+	totpSecret: text('totp_secret'),
+	totpEnabledAt: ts('totp_enabled_at'),
 	createdAt: createdAt(),
 })
 
@@ -59,11 +62,116 @@ export const sessions = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
 		label: text('label'),
+		/** When this session passed a second factor (passkey or authenticator code). Null: it can only set one up. */
+		mfaAt: ts('mfa_at'),
 		createdAt: createdAt(),
 		lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
 		expiresAt: ts('expires_at').notNull(),
 	},
 	t => [index('sessions_user_idx').on(t.userId)],
+)
+
+/** WebAuthn credentials (Touch ID, security keys, phone passkeys). */
+export const passkeys = pgTable(
+	'passkeys',
+	{
+		/** The credential id, base64url */
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		publicKey: text('public_key').notNull(),
+		counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+		transports: text('transports').array().notNull().default(sql`'{}'::text[]`),
+		createdAt: createdAt(),
+		lastUsedAt: ts('last_used_at'),
+	},
+	t => [index('passkeys_user_idx').on(t.userId)],
+)
+
+/** One-time codes for when the authenticator app is lost. Stored as sha256. */
+export const recoveryCodes = pgTable(
+	'recovery_codes',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		codeHash: text('code_hash').notNull(),
+		usedAt: ts('used_at'),
+	},
+	t => [index('recovery_codes_user_idx').on(t.userId)],
+)
+
+export type TokenScope = { type: 'all' } | { type: 'selected'; projectIds: string[]; mailboxIds: string[] }
+
+/** API tokens for apps (the SDK). Stored as sha256; the token is shown once. */
+export const apiTokens = pgTable(
+	'api_tokens',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(),
+		tokenHash: text('token_hash').notNull().unique(),
+		/** The first characters, to recognise a token in the list */
+		prefix: text('prefix').notNull(),
+		canRead: boolean('can_read').notNull().default(true),
+		canSend: boolean('can_send').notNull().default(true),
+		scope: jsonb('scope').$type<TokenScope>().notNull(),
+		webhookUrl: text('webhook_url'),
+		/** Encrypted with APP_SECRET: it signs every webhook delivery */
+		webhookSecret: text('webhook_secret'),
+		expiresAt: ts('expires_at'),
+		lastUsedAt: ts('last_used_at'),
+		revokedAt: ts('revoked_at'),
+		createdAt: createdAt(),
+	},
+	t => [index('api_tokens_user_idx').on(t.userId)],
+)
+
+export type MailEventType = 'message.received' | 'message.sent' | 'message.failed'
+
+/** What happened to mail, in order, for the app stream and webhooks. Kept for 7 days. */
+export const mailEvents = pgTable(
+	'mail_events',
+	{
+		id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+		mailboxId: text('mailbox_id')
+			.notNull()
+			.references(() => mailboxes.id, { onDelete: 'cascade' }),
+		type: text('type').$type<MailEventType>().notNull(),
+		messageId: text('message_id'),
+		outboxId: text('outbox_id'),
+		error: text('error'),
+		createdAt: createdAt(),
+	},
+	t => [index('mail_events_mailbox_idx').on(t.mailboxId, t.id), index('mail_events_created_idx').on(t.createdAt)],
+)
+
+export const webhookDeliveries = pgTable(
+	'webhook_deliveries',
+	{
+		id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+		tokenId: text('token_id')
+			.notNull()
+			.references(() => apiTokens.id, { onDelete: 'cascade' }),
+		eventId: bigint('event_id', { mode: 'number' })
+			.notNull()
+			.references(() => mailEvents.id, { onDelete: 'cascade' }),
+		status: text('status').$type<'pending' | 'delivered' | 'failed'>().notNull().default('pending'),
+		attempts: integer('attempts').notNull().default(0),
+		nextAttemptAt: ts('next_attempt_at').notNull().defaultNow(),
+		responseStatus: integer('response_status'),
+		lastError: text('last_error'),
+		createdAt: createdAt(),
+	},
+	t => [
+		index('webhook_deliveries_due_idx').on(t.status, t.nextAttemptAt),
+		uniqueIndex('webhook_deliveries_unique_idx').on(t.tokenId, t.eventId),
+	],
 )
 
 // --- Projects, domains, mailboxes -------------------------------------------------------------
@@ -292,9 +400,16 @@ export const outbox = pgTable(
 		error: text('error'),
 		messageId: text('message_id'),
 		sentAt: ts('sent_at'),
+		/** Sent through the API: the token, and the caller's key so a retried request sends once */
+		tokenId: text('token_id'),
+		idempotencyKey: text('idempotency_key'),
 		createdAt: createdAt(),
 	},
-	t => [index('outbox_due_idx').on(t.status, t.sendAt), index('outbox_user_idx').on(t.userId)],
+	t => [
+		index('outbox_due_idx').on(t.status, t.sendAt),
+		index('outbox_user_idx').on(t.userId),
+		uniqueIndex('outbox_idempotency_idx').on(t.userId, t.idempotencyKey).where(sql`idempotency_key is not null`),
+	],
 )
 
 export const uploads = pgTable('uploads', {

@@ -1,5 +1,5 @@
 import type { User } from '@mailroom/shared'
-import { and, eq, gt } from 'drizzle-orm'
+import { and, eq, gt, isNull } from 'drizzle-orm'
 import { db, schema } from './db'
 import { env } from './env'
 import { randomToken, sha256 } from './lib/ids'
@@ -30,24 +30,35 @@ export function validatePassword(password: string) {
 
 const sessionMs = () => env.sessionDays * 24 * 60 * 60 * 1000
 
-export async function createSession(userId: string, label: string | null) {
+/** verified: the sign-in passed a second factor. An unverified session can only set one up. */
+export async function createSession(userId: string, label: string | null, verified: boolean) {
 	const token = randomToken()
 	await db.insert(schema.sessions).values({
 		id: sha256(token),
 		userId,
 		label: label?.slice(0, 200) ?? null,
+		mfaAt: verified ? new Date() : null,
 		expiresAt: new Date(Date.now() + sessionMs()),
 	})
 	return token
 }
 
+export const markSessionVerified = (sessionId: string) =>
+	db.update(schema.sessions).set({ mfaAt: new Date() }).where(eq(schema.sessions.id, sessionId))
+
 export async function deleteSession(token: string) {
 	await db.delete(schema.sessions).where(eq(schema.sessions.id, sha256(token)))
 }
 
-/** The signed-in user for a token, or null. Slides the expiry forward at most every 10 minutes. */
-export async function userForToken(token: string | undefined | null): Promise<UserRow | null> {
-	if (!token) return null
+export interface SessionAuth {
+	user: UserRow
+	sessionId: string
+	verified: boolean
+}
+
+/** The session for a token, or null. Slides the expiry forward at most every 10 minutes. */
+export async function sessionForToken(token: string | undefined | null): Promise<SessionAuth | null> {
+	if (!token || token.startsWith(API_TOKEN_PREFIX)) return null
 	const id = sha256(token)
 	const [row] = await db
 		.select({ user: schema.users, session: schema.sessions })
@@ -62,7 +73,27 @@ export async function userForToken(token: string | undefined | null): Promise<Us
 			.set({ lastSeenAt: new Date(), expiresAt: new Date(Date.now() + sessionMs()) })
 			.where(eq(schema.sessions.id, id))
 	}
-	return row.user
+	return { user: row.user, sessionId: id, verified: !!row.session.mfaAt }
+}
+
+export const API_TOKEN_PREFIX = 'mr_'
+export type ApiTokenRow = typeof schema.apiTokens.$inferSelect
+
+/** An app's API token: its owner and the token, or null when unknown, revoked or expired. */
+export async function apiTokenAuth(token: string | null): Promise<{ user: UserRow; token: ApiTokenRow } | null> {
+	if (!token?.startsWith(API_TOKEN_PREFIX)) return null
+	const [row] = await db
+		.select({ user: schema.users, token: schema.apiTokens })
+		.from(schema.apiTokens)
+		.innerJoin(schema.users, eq(schema.users.id, schema.apiTokens.userId))
+		.where(and(eq(schema.apiTokens.tokenHash, sha256(token)), isNull(schema.apiTokens.revokedAt)))
+		.limit(1)
+	if (!row || row.user.disabled) return null
+	if (row.token.expiresAt && row.token.expiresAt.getTime() < Date.now()) return null
+	if (!row.token.lastUsedAt || Date.now() - row.token.lastUsedAt.getTime() > 60_000) {
+		await db.update(schema.apiTokens).set({ lastUsedAt: new Date() }).where(eq(schema.apiTokens.id, row.token.id))
+	}
+	return row
 }
 
 export function tokenFrom(headers: Headers, cookie: Record<string, { value?: unknown }>) {

@@ -1,7 +1,7 @@
 import type { ServerEvent } from '@mailroom/shared'
 import { Elysia } from 'elysia'
 import { accessibleMailboxIds } from '../access'
-import { authed } from '../context'
+import { sessionAuth } from '../context'
 import { EVENTS_CHANNEL, subscribe } from '../lib/redis'
 
 // Server-sent events: one Redis subscription per API process, fanned out to every open browser tab,
@@ -19,7 +19,7 @@ function ensureSubscribed() {
 	})
 }
 
-export const eventRoutes = new Elysia().use(authed).get('/events', async ({ user, request }) => {
+export const eventRoutes = new Elysia().use(sessionAuth).get('/events', async ({ user, request }) => {
 	ensureSubscribed()
 	let allowed = new Set(await accessibleMailboxIds(user))
 	const encoder = new TextEncoder()

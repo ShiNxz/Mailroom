@@ -2,7 +2,7 @@ import type { ComposePayload, Draft, OutboxItem, Template } from '@mailroom/shar
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { Elysia, t } from 'elysia'
 import { accessibleMailboxIds, accessibleProjectIds, assertMailboxAccess, isAdmin } from '../access'
-import { authed } from '../context'
+import { authed, type ScopedUser } from '../context'
 import { db, schema } from '../db'
 import { env } from '../env'
 import { badRequest, HttpError, notFound } from '../lib/http'
@@ -54,9 +54,11 @@ const toTemplate = (r: typeof schema.templates.$inferSelect): Template => ({
 	createdBy: r.createdBy,
 })
 
-async function ownOutboxItem(userId: string, id: string, admin: boolean) {
+/** Admins may manage anyone's queued mail from the app; an API token only what it sent itself. */
+async function ownOutboxItem(caller: { user: ScopedUser; token: { id: string } | null }, id: string) {
 	const [row] = await db.select().from(schema.outbox).where(eq(schema.outbox.id, id))
-	if (!row || (row.userId !== userId && !admin)) throw notFound('Not in the outbox')
+	const mine = row && row.userId === caller.user.id && (!caller.token || row.tokenId === caller.token.id)
+	if (!row || (!mine && (caller.token || !isAdmin(caller.user)))) throw notFound('Not in the outbox')
 	return row
 }
 
@@ -160,8 +162,8 @@ export const composeRoutes = new Elysia()
 		{ query: t.Object({ status: t.Optional(t.String()), thread: t.Optional(t.String({ maxLength: 64 })) }) },
 	)
 
-	.post('/outbox/:id/cancel', async ({ user, params }) => {
-		const row = await ownOutboxItem(user.id, params.id, isAdmin(user))
+	.post('/outbox/:id/cancel', async ({ user, token, params }) => {
+		const row = await ownOutboxItem({ user, token }, params.id)
 		// Only while it is still waiting: the row lock makes this race-free against the sender
 		const [cancelled] = await db
 			.update(schema.outbox)
@@ -175,8 +177,8 @@ export const composeRoutes = new Elysia()
 
 	.patch(
 		'/outbox/:id',
-		async ({ user, params, body }) => {
-			const row = await ownOutboxItem(user.id, params.id, isAdmin(user))
+		async ({ user, token, params, body }) => {
+			const row = await ownOutboxItem({ user, token }, params.id)
 			const sendAt = body.sendAt === 'now' ? new Date() : new Date(body.sendAt)
 			if (Number.isNaN(sendAt.getTime())) throw badRequest('Bad send time')
 			const [updated] = await db
