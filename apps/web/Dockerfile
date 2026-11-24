@@ -50,6 +50,8 @@ FROM node:26.12.1-trixie-slim AS runtime
 WORKDIR /app
 COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+# public/ is not traced either: it holds the service worker (sw.js) for push notifications
+COPY --from=build --chown=node:node /app/apps/web/public ./apps/web/public
 # HOSTNAME: Docker sets it to the container id, and Next's standalone server binds to it.
 ENV NODE_ENV=production \
 	NEXT_TELEMETRY_DISABLED=1 \

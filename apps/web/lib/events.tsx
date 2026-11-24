@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { mutate } from 'swr'
 import { refreshBootstrap, refreshLists } from './api'
+import { pushIsOnHere } from './pwa'
 import { displayName } from './format'
 
 // One EventSource per tab. New mail, flag changes and sync progress revalidate the SWR caches, so every
@@ -43,6 +44,8 @@ export function useServerEvents(opts: { notifications: boolean }) {
 						event.newInbox?.length &&
 						opts.notifications &&
 						document.hidden &&
+						// Push already shows it on this device
+						!pushIsOnHere() &&
 						'Notification' in window &&
 						Notification.permission === 'granted'
 					) {

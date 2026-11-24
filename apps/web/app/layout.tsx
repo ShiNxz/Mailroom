@@ -1,26 +1,28 @@
-import { type Branding, DEFAULT_BRANDING } from '@mailroom/shared'
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import type { ReactNode } from 'react'
 import { Toaster } from 'sonner'
+import { brandingVersion, serverBranding } from '@/lib/server-branding'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
-const API_URL = (process.env.API_URL ?? 'http://localhost:3001').replace(/\/$/, '')
-
-// The tab title and icon come from the branding (Settings), so they are right before any script runs
+// The tab title and icon, and the installed app's name and home screen icon, come from the branding
+// (Settings), so they are right before any script runs
 export async function generateMetadata(): Promise<Metadata> {
-	let branding: Branding = DEFAULT_BRANDING
-	try {
-		const res = await fetch(`${API_URL}/branding`, { next: { revalidate: 30 }, signal: AbortSignal.timeout(2000) })
-		if (res.ok) branding = await res.json()
-	} catch {}
+	const branding = await serverBranding()
+	const v = brandingVersion(branding)
 	return {
 		title: branding.name,
 		description: 'Mail for every project',
 		robots: { index: false, follow: false },
-		...(branding.logoUrl ? { icons: { icon: branding.logoUrl, apple: branding.logoUrl } } : {}),
+		manifest: '/manifest.webmanifest',
+		applicationName: branding.name,
+		appleWebApp: { capable: true, title: branding.name, statusBarStyle: 'default' },
+		icons: {
+			icon: branding.logoUrl ?? `/pwa/icon-192.png?v=${v}`,
+			apple: `/pwa/apple-touch-icon.png?v=${v}`,
+		},
 	}
 }
 

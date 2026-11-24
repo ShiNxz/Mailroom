@@ -6,6 +6,7 @@ import { type ReactNode, Suspense, useEffect, useState } from 'react'
 import { useBranding, useBrandingInDocument } from '@/components/Brand'
 import { ComposerHost } from '@/components/compose/Composer'
 import { ComposeProvider, useCompose } from '@/components/compose/context'
+import { PwaBridge } from '@/components/PwaBridge'
 import { Sidebar } from '@/components/Sidebar'
 import { Loading } from '@/components/ui'
 import { useMe } from '@/lib/api'
@@ -89,6 +90,7 @@ function Shell({ children }: { children: ReactNode }) {
 			</main>
 			<ComposerHost />
 			<Shortcuts />
+			<PwaBridge />
 		</div>
 	)
 }

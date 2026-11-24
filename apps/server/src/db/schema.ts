@@ -132,6 +132,33 @@ export const apiTokens = pgTable(
 	t => [index('api_tokens_user_idx').on(t.userId)],
 )
 
+/**
+ * A browser or installed app that gets push notifications for new mail. Tied to the session that turned it
+ * on: signing out, a sign-in reset or the session expiring removes it with the session.
+ */
+export const pushDevices = pgTable(
+	'push_devices',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => users.id, { onDelete: 'cascade' }),
+		sessionId: text('session_id')
+			.notNull()
+			.references(() => sessions.id, { onDelete: 'cascade' }),
+		/** SHA-256 of the endpoint: finds a browser's row without reading the encrypted subscription */
+		endpointHash: text('endpoint_hash').notNull().unique(),
+		/** The endpoint and keys, encrypted with APP_SECRET */
+		subscription: text('subscription').notNull(),
+		label: text('label').notNull().default('Browser'),
+		failures: integer('failures').notNull().default(0),
+		lastError: text('last_error'),
+		lastSentAt: ts('last_sent_at'),
+		createdAt: createdAt(),
+	},
+	t => [index('push_devices_user_idx').on(t.userId)],
+)
+
 export type MailEventType = 'message.received' | 'message.sent' | 'message.failed'
 
 /** What happened to mail, in order, for the app stream and webhooks. Kept for 7 days. */

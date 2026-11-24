@@ -14,6 +14,7 @@ import { composeRoutes } from './routes/compose'
 import { eventRoutes } from './routes/events'
 import { mailRoutes } from './routes/mail'
 import { prefsRoutes } from './routes/prefs'
+import { pushRoutes } from './routes/push'
 import { securityRoutes } from './routes/security'
 import { tokenRoutes } from './routes/tokens'
 
@@ -51,6 +52,7 @@ const app = new Elysia()
 	.use(mailRoutes)
 	.use(composeRoutes)
 	.use(prefsRoutes)
+	.use(pushRoutes)
 	.use(eventRoutes)
 	.use(tokenRoutes)
 	.use(appRoutes)

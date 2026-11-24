@@ -8,6 +8,7 @@ import type { ApiTokenRow, UserRow } from '../auth'
 import { db, schema } from '../db'
 import type { MailEventType } from '../db/schema'
 import { errorMessage, log } from '../lib/log'
+import { pushNewMail } from '../push/push'
 import { redis } from '../lib/redis'
 
 export const MAIL_EVENTS_CHANNEL = 'mailroom:mail-events'
@@ -52,6 +53,8 @@ export async function recordMailEvent(e: {
 		if (!row) return
 		await queueWebhooks(row)
 		await redis.publish(MAIL_EVENTS_CHANNEL, JSON.stringify({ id: row.id, mailboxId: row.mailboxId }))
+		// Phones and browsers with notifications on; in the background so syncing never waits on push services
+		if (row.type === 'message.received' && row.messageId) void pushNewMail(row.messageId)
 	} catch (err) {
 		// Never let an app-facing event break syncing or sending
 		log.warn('could not record a mail event', { type: e.type, err: errorMessage(err) })

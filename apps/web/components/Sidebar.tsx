@@ -36,7 +36,7 @@ import { BrandMark, useBranding } from './Brand'
 import { useCompose } from './compose/context'
 import { type MenuItem, useContextMenu } from './ContextMenu'
 import { draggingClass, SortableGrip, SortableGroup, type SortableItem, useSortableItem } from './Sortable'
-import { SectionTitle, StatusDot, STATUS_LABEL } from './ui'
+import { PersonAvatar, SectionTitle, StatusDot, STATUS_LABEL } from './ui'
 
 const VIEWS: { view: View; label: string; icon: ReactNode }[] = [
 	{ view: 'inbox', label: 'Inbox', icon: <Inbox /> },
@@ -663,9 +663,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 			<div className="flex shrink-0 items-center gap-1 border-t border-separator p-2">
 				<Dropdown>
 					<Button variant="ghost" className="min-w-0 flex-1 justify-start">
-						<span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground">
-							{me?.user.name.slice(0, 1).toUpperCase()}
-						</span>
+						{me && <PersonAvatar who={{ name: me.user.name, address: me.user.email }} size={24} />}
 						<span className="truncate text-sm">{me?.user.name}</span>
 					</Button>
 					<Dropdown.Popover placement="top start">

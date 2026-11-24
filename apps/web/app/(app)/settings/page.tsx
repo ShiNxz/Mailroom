@@ -10,6 +10,7 @@ import { BrandMark, useBranding } from '@/components/Brand'
 import { MailEditor } from '@/components/compose/Editor'
 import { toggleTheme } from '@/components/Sidebar'
 import { ApiTokens } from '@/components/settings/ApiTokens'
+import { NotificationsSettings } from '@/components/settings/NotificationsSettings'
 import { Section } from '@/components/settings/Section'
 import { SecuritySettings } from '@/components/settings/SecuritySettings'
 import { IconButton, Loading } from '@/components/ui'
@@ -429,6 +430,7 @@ export default function SettingsPage() {
 			<div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-24 sm:p-8">
 				<h1 className="pl-10 text-2xl font-semibold lg:pl-0">Settings</h1>
 				<Profile />
+				<NotificationsSettings />
 				<SecuritySettings />
 				<ApiTokens />
 				{isAdminRole(me.user.role) && <BrandingSettings />}
