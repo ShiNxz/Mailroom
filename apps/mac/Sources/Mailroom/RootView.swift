@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct RootView: View {
@@ -76,40 +77,60 @@ struct BannerView: View {
 struct LoginView: View {
 	@Environment(AppStore.self) private var store
 	@State private var server = AppStore.shared.server
-	@State private var email = ""
-	@State private var password = ""
 	@State private var error: String?
-	@State private var busy = false
+	@State private var pending: AppStore.DeviceSignIn?
+	@State private var flow: Task<Void, Never>?
 
 	var body: some View {
 		VStack(spacing: 18) {
 			BrandLogo(branding: store.branding, size: 56)
 			VStack(spacing: 4) {
 				Text("Sign in to \(store.branding.name)").font(.title2.weight(.semibold))
-				Text("Use the same account as the web app.").foregroundStyle(.secondary)
+				Text(pending == nil ? "You sign in on the web app, with your passkey or code." : "Approve the sign-in in your browser.")
+					.foregroundStyle(.secondary)
 			}
-			Form {
-				TextField("Server", text: $server, prompt: Text("https://mail.example.com"))
-				TextField("Email", text: $email, prompt: Text("you@company.com"))
-					.textContentType(.username)
-				SecureField("Password", text: $password)
-					.textContentType(.password)
-					.onSubmit(signIn)
+			if let pending {
+				VStack(spacing: 10) {
+					Text("Check that the browser shows this code")
+						.font(.callout)
+						.foregroundStyle(.secondary)
+					Text(pending.userCode)
+						.font(.system(size: 30, weight: .semibold, design: .monospaced))
+						.textSelection(.enabled)
+					HStack(spacing: 8) {
+						ProgressView().controlSize(.small)
+						Text("Waiting for approval...").foregroundStyle(.secondary)
+					}
+					HStack {
+						Button("Open the browser again") { open(pending) }
+						Button("Cancel", role: .cancel) { cancel() }
+					}
+					.padding(.top, 4)
+				}
+				.frame(width: 380)
+			} else {
+				Form {
+					TextField("Server", text: $server, prompt: Text("https://mail.example.com"))
+						.onSubmit(signIn)
+				}
+				.formStyle(.grouped)
+				.frame(width: 380)
+				.scrollDisabled(true)
+				.fixedSize(horizontal: false, vertical: true)
+				Button(action: signIn) {
+					Label("Sign in with browser", systemImage: "safari").frame(minWidth: 180)
+				}
+				.buttonStyle(.borderedProminent)
+				.controlSize(.large)
+				.keyboardShortcut(.defaultAction)
+				.disabled(server.trimmingCharacters(in: .whitespaces).isEmpty)
 			}
-			.formStyle(.grouped)
-			.frame(width: 380)
-			.scrollDisabled(true)
-			.fixedSize(horizontal: false, vertical: true)
+			if let note = store.signInNote, error == nil, pending == nil {
+				Text(note).foregroundStyle(.secondary).font(.callout).multilineTextAlignment(.center).frame(width: 360)
+			}
 			if let error {
 				Text(error).foregroundStyle(.red).font(.callout).multilineTextAlignment(.center).frame(width: 360)
 			}
-			Button(action: signIn) {
-				if busy { ProgressView().controlSize(.small) } else { Text("Sign In").frame(width: 120) }
-			}
-			.buttonStyle(.borderedProminent)
-			.controlSize(.large)
-			.keyboardShortcut(.defaultAction)
-			.disabled(busy || email.isEmpty || password.isEmpty)
 		}
 		.padding(40)
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,19 +140,34 @@ struct LoginView: View {
 			guard !Task.isCancelled, server.contains(".") || server.contains("localhost") else { return }
 			await store.loadBranding(server: server)
 		}
+		.onDisappear { flow?.cancel() }
+	}
+
+	private func open(_ start: AppStore.DeviceSignIn) {
+		if let url = store.deviceURL(server: server, start) { NSWorkspace.shared.open(url) }
 	}
 
 	private func signIn() {
-		busy = true
 		error = nil
-		Task {
+		flow?.cancel()
+		flow = Task {
 			do {
-				try await store.signIn(server: server, email: email, password: password)
+				let start = try await store.startDeviceSignIn(server: server)
+				pending = start
+				open(start)
+				try await store.finishDeviceSignIn(server: server, start)
+			} catch is CancellationError {
 			} catch {
 				self.error = error.localizedDescription
 			}
-			busy = false
+			pending = nil
 		}
+	}
+
+	private func cancel() {
+		flow?.cancel()
+		flow = nil
+		pending = nil
 	}
 }
 

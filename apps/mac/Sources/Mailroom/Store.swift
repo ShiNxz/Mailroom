@@ -42,6 +42,8 @@ final class AppStore {
 	var phase: Phase = .starting
 	var server: String = UserDefaults.standard.string(forKey: "server") ?? "https://mail.lue.my"
 	private(set) var token: String?
+	/// Shown on the sign-in screen, like why the app signed out
+	var signInNote: String?
 	var user: User?
 
 	// Data
@@ -84,8 +86,20 @@ final class AppStore {
 		}
 		guard token != nil else { return phase = .signedOut }
 		do {
-			struct Me: Decodable { let user: User }
-			user = try await api.get("/auth/me", as: Me.self).user
+			struct Me: Decodable {
+				struct Security: Decodable { let verified: Bool }
+				let user: User
+				let security: Security?
+			}
+			let me = try await api.get("/auth/me", as: Me.self)
+			// A session from before sign-in needed a second step: sign in again through the browser
+			if me.security?.verified == false {
+				Keychain.write("token:\(API.normalize(server))", nil)
+				token = nil
+				signInNote = "Sign in again: \(branding.name) now confirms sign-ins in your browser."
+				return phase = .signedOut
+			}
+			user = me.user
 			phase = .signedIn
 			await afterSignIn()
 		} catch let error as APIError where error.status == 401 {
@@ -99,27 +113,70 @@ final class AppStore {
 		}
 	}
 
-	func signIn(server: String, email: String, password: String) async throws {
+	// MARK: Signing in through the browser
+	//
+	// The app asks for a code, opens the web app's /device page, and the person approves it there after
+	// signing in with their passkey or code. The app never sees a password or a second factor.
+
+	struct DeviceSignIn: Decodable {
+		let deviceCode: String
+		let userCode: String
+		let verifyPath: String
+		let expiresIn: Int
+		let interval: Int
+	}
+
+	func startDeviceSignIn(server: String) async throws -> DeviceSignIn {
+		struct Body: Encodable { let device: String }
+		let device = "Mailroom for Mac on \(Host.current().localizedName ?? "a Mac")"
+		return try await API(server: API.normalize(server), token: nil).post("/auth/device/start", Body(device: device))
+	}
+
+	/// The page to approve the sign-in on, with the code filled in
+	func deviceURL(server: String, _ start: DeviceSignIn) -> URL? {
+		URL(string: API.normalize(server) + start.verifyPath)
+	}
+
+	/// Waits for the browser's answer. Returns when signed in; throws when refused, expired or cancelled.
+	func finishDeviceSignIn(server: String, _ start: DeviceSignIn) async throws {
 		let server = API.normalize(server)
-		struct Body: Encodable {
-			let email: String
-			let password: String
-			let client = "native"
-			let device: String
+		struct Body: Encodable { let deviceCode: String }
+		struct Poll: Decodable {
+			let status: String
+			let token: String?
+			let user: User?
 		}
-		struct Out: Decodable {
-			let user: User
-			let token: String
+		let api = API(server: server, token: nil)
+		let deadline = Date().addingTimeInterval(TimeInterval(start.expiresIn))
+		while Date() < deadline {
+			try await Task.sleep(for: .seconds(max(1, start.interval)))
+			let poll: Poll
+			do {
+				poll = try await api.post("/auth/device/poll", Body(deviceCode: start.deviceCode))
+			} catch let error as APIError where error.status == 410 {
+				throw APIError(status: 410, message: "The code expired. Start again.")
+			} catch let error as APIError where error.status == 0 {
+				continue // offline for a moment: keep waiting
+			}
+			switch poll.status {
+			case "approved":
+				guard let token = poll.token, let user = poll.user else { throw APIError(status: 0, message: "No session came back") }
+				self.server = server
+				UserDefaults.standard.set(server, forKey: "server")
+				self.token = token
+				Keychain.write("token:\(server)", token)
+				self.user = user
+				signInNote = nil
+				phase = .signedIn
+				await afterSignIn()
+				return
+			case "denied":
+				throw APIError(status: 403, message: "The sign-in was refused in the browser.")
+			default:
+				continue
+			}
 		}
-		let device = "Mac app (\(Host.current().localizedName ?? "Mac"))"
-		let out: Out = try await API(server: server, token: nil).post("/auth/login", Body(email: email, password: password, device: device))
-		self.server = server
-		UserDefaults.standard.set(server, forKey: "server")
-		token = out.token
-		Keychain.write("token:\(server)", out.token)
-		user = out.user
-		phase = .signedIn
-		await afterSignIn()
+		throw APIError(status: 410, message: "The code expired. Start again.")
 	}
 
 	func signOut() async {
@@ -316,7 +373,9 @@ final class AppStore {
 	}
 
 	func report(_ error: Error) {
-		if let e = error as? APIError, e.status == 401 {
+		// Signed out, or a session that never confirmed a second step: back to the browser sign-in
+		if let e = error as? APIError, e.status == 401 || e.code == "mfa_setup_required" {
+			if e.code == "mfa_setup_required" { signInNote = "Sign in again: sign-ins are confirmed in your browser now." }
 			Task { await signOut() }
 			return
 		}
@@ -522,7 +581,7 @@ final class AppStore {
 				guard let self, let r = try? self.api.request("/events", timeout: 120) else { return }
 				do {
 					let (bytes, response) = try await URLSession.shared.bytes(for: r)
-					if (response as? HTTPURLResponse)?.statusCode == 401 {
+					if let status = (response as? HTTPURLResponse)?.statusCode, status == 401 || status == 403 {
 						await self.signOut()
 						return
 					}

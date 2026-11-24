@@ -4,6 +4,8 @@ import Security
 struct APIError: LocalizedError {
 	let status: Int
 	let message: String
+	/// The server's reason, like "mfa_setup_required" or "expired"
+	var code: String? = nil
 	var errorDescription: String? { message }
 }
 
@@ -54,8 +56,12 @@ struct API: Sendable {
 		}
 		guard let http = response as? HTTPURLResponse else { throw APIError(status: 0, message: "No answer from the server") }
 		guard (200 ..< 300).contains(http.statusCode) else {
-			let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
-			throw APIError(status: http.statusCode, message: message ?? "Request failed (HTTP \(http.statusCode))")
+			let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+			throw APIError(
+				status: http.statusCode,
+				message: json?["error"] as? String ?? "Request failed (HTTP \(http.statusCode))",
+				code: json?["code"] as? String
+			)
 		}
 		return data
 	}
