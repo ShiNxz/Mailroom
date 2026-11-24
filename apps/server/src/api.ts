@@ -64,7 +64,9 @@ const app = new Elysia()
 
 log.info('api listening', { port: app.server?.port })
 if (!env.publicUrl)
-	log.warn('PUBLIC_URL is not set: passkeys use the browser origin and cross-site checks are off. Set it in production.')
+	log.warn(
+		'PUBLIC_URL is not set: passkeys use the browser origin and cross-site checks are off. Set it in production.',
+	)
 
 const stop = () => {
 	app.stop()

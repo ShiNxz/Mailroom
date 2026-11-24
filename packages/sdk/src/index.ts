@@ -104,7 +104,8 @@ export interface SendOptions {
 	wait?: boolean | { timeoutMs?: number }
 }
 
-export interface ReplyOptions extends Pick<SendOptions, 'text' | 'html' | 'attachments' | 'sendAt' | 'idempotencyKey' | 'name' | 'wait'> {
+export interface ReplyOptions
+	extends Pick<SendOptions, 'text' | 'html' | 'attachments' | 'sendAt' | 'idempotencyKey' | 'name' | 'wait'> {
 	/** Also to everyone else on the original */
 	replyAll?: boolean
 }
@@ -132,8 +133,20 @@ type Handlers = {
 }
 
 export type WebhookEvent =
-	| { id: string; type: 'message.received'; createdAt: string; mailbox: { id: string; address: string }; message: MessageData }
-	| { id: string; type: 'message.sent' | 'message.failed'; createdAt: string; mailbox: { id: string; address: string }; send: SendResult }
+	| {
+			id: string
+			type: 'message.received'
+			createdAt: string
+			mailbox: { id: string; address: string }
+			message: MessageData
+	  }
+	| {
+			id: string
+			type: 'message.sent' | 'message.failed'
+			createdAt: string
+			mailbox: { id: string; address: string }
+			send: SendResult
+	  }
 	| { id: string; type: 'ping'; createdAt: string }
 
 export class MailroomError extends Error {
@@ -162,7 +175,10 @@ export interface MailroomOptions {
 // --- Helpers -------------------------------------------------------------------------------------
 
 const env = (name: string): string | undefined => {
-	const g = globalThis as { process?: { env?: Record<string, string | undefined> }; Deno?: { env: { get(n: string): string | undefined } } }
+	const g = globalThis as {
+		process?: { env?: Record<string, string | undefined> }
+		Deno?: { env: { get(n: string): string | undefined } }
+	}
 	try {
 		return g.process?.env?.[name] ?? g.Deno?.env.get(name)
 	} catch {
@@ -245,7 +261,10 @@ export class Message implements MessageData {
 
 	/** The bodies, when this message came from a list. */
 	async load(): Promise<this> {
-		const { message } = await this.client.request<{ message: MessageData }>('GET', `/messages/${encodeURIComponent(this.id)}`)
+		const { message } = await this.client.request<{ message: MessageData }>(
+			'GET',
+			`/messages/${encodeURIComponent(this.id)}`,
+		)
 		Object.assign(this, message)
 		return this
 	}
@@ -313,7 +332,11 @@ export class Mailbox {
 
 // --- The client ----------------------------------------------------------------------------------
 
-type Listener = { event: MailroomEventName; handler: (v: unknown) => unknown; filter?: (box: { address: string; id: string }) => boolean }
+type Listener = {
+	event: MailroomEventName
+	handler: (v: unknown) => unknown
+	filter?: (box: { address: string; id: string }) => boolean
+}
 
 export class Mailroom {
 	private readonly base: string
@@ -406,15 +429,19 @@ export class Mailroom {
 	}
 
 	async replyTo(messageId: string, options: ReplyOptions): Promise<SendResult> {
-		const { send } = await this.request<{ send: SendResult }>('POST', `/messages/${encodeURIComponent(messageId)}/reply`, {
-			text: options.text,
-			html: options.html,
-			replyAll: options.replyAll,
-			fromName: options.name,
-			attachments: options.attachments?.map(attachmentBody),
-			sendAt: options.sendAt instanceof Date ? options.sendAt.toISOString() : options.sendAt,
-			idempotencyKey: options.idempotencyKey,
-		})
+		const { send } = await this.request<{ send: SendResult }>(
+			'POST',
+			`/messages/${encodeURIComponent(messageId)}/reply`,
+			{
+				text: options.text,
+				html: options.html,
+				replyAll: options.replyAll,
+				fromName: options.name,
+				attachments: options.attachments?.map(attachmentBody),
+				sendAt: options.sendAt instanceof Date ? options.sendAt.toISOString() : options.sendAt,
+				idempotencyKey: options.idempotencyKey,
+			},
+		)
 		return options.wait ? this.waitForSend(send.id, typeof options.wait === 'object' ? options.wait : {}) : send
 	}
 
@@ -611,13 +638,20 @@ export class Mailroom {
 	 * the Mailroom-Signature header, `secret` the token's webhook secret. Refuses deliveries older than
 	 * `toleranceSeconds` (replays).
 	 */
-	static async verifyWebhook(body: string, signature: string | null | undefined, secret: string, toleranceSeconds = 300) {
+	static async verifyWebhook(
+		body: string,
+		signature: string | null | undefined,
+		secret: string,
+		toleranceSeconds = 300,
+	) {
 		const match = signature?.match(/^t=(\d+),v1=([0-9a-f]{64})$/)
 		if (!match) return false
 		const [, t, v1] = match
 		if (Math.abs(Date.now() / 1000 - Number(t)) > toleranceSeconds) return false
 		const s = await subtle()
-		const key = await s.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+		const key = await s.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, [
+			'sign',
+		])
 		const mac = new Uint8Array(await s.sign('HMAC', key, new TextEncoder().encode(`${t}.${body}`)))
 		const hex = Array.from(mac, b => b.toString(16).padStart(2, '0')).join('')
 		return equalHex(hex, v1!)
