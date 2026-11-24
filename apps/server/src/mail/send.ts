@@ -108,7 +108,8 @@ async function sendOne(item: OutboxRow, syncers: Map<string, MailboxSync>) {
 		const domain = mailbox.address.split('@')[1] ?? 'localhost'
 		const messageId = `<${randomToken(18)}@${domain}>`
 		// API sends may be plain text only; the web composer always sends HTML
-		const html = p.html.trim() ? sanitizeComposerHtml(p.html) : null
+		// Composer html is cleaned; an API send's html (react-email and the like) goes out as the app built it
+		const html = p.html.trim() ? (p.rawHtml ? p.html : sanitizeComposerHtml(p.html)) : null
 		const composer = new MailComposer({
 			from: { name: p.fromName?.trim() || mailbox.displayName, address: mailbox.address },
 			replyTo: p.replyTo?.length ? p.replyTo.map(a => ({ name: a.name, address: a.address })) : undefined,

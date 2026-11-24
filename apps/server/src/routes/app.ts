@@ -209,6 +209,7 @@ async function queueSend(user: ScopedUser, token: ApiTokenRow | null, input: Sen
 				headers,
 				attachmentIds: uploads.map(u => u.id),
 				attachmentCids: inline.length ? Object.fromEntries(inline.map(u => [u.id, u.cid!])) : null,
+				rawHtml: true,
 			}
 			const [row] = await tx
 				.insert(schema.outbox)

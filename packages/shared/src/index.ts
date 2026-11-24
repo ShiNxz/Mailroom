@@ -226,6 +226,11 @@ export interface ComposePayload {
 	text?: string | null
 	/** Extra headers from API sends (List-Unsubscribe and the like); the server checks which are allowed. */
 	headers?: Record<string, string> | null
+	/**
+	 * API sends: the app's HTML goes out exactly as given (a full react-email or jsx-email document with
+	 * its <head>, <style> and table attributes). Composer mail is cleaned before it is sent instead.
+	 */
+	rawHtml?: boolean
 }
 
 export interface OutboxItem {

@@ -15,7 +15,15 @@
 	"files": ["dist", "README.md"],
 	"engines": { "node": ">=18" },
 	"repository": { "type": "git", "url": "git+https://github.com/ShiNxz/Mailroom.git", "directory": "packages/sdk" },
-	"keywords": ["email", "mail", "imap", "smtp", "mailroom", "webhooks"],
+	"keywords": ["email", "mail", "imap", "smtp", "mailroom", "webhooks", "react-email", "jsx-email"],
+	"peerDependencies": {
+		"@react-email/render": ">=1",
+		"jsx-email": ">=2"
+	},
+	"peerDependenciesMeta": {
+		"@react-email/render": { "optional": true },
+		"jsx-email": { "optional": true }
+	},
 	"scripts": {
 		"build": "tsc -p tsconfig.build.json",
 		"typecheck": "tsc --noEmit -p .",

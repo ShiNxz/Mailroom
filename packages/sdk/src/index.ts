@@ -95,7 +95,14 @@ export interface SendOptions {
 	replyTo?: AddressInput
 	subject: string
 	text?: string
+	/** Sent exactly as given: a full document with <head>, <style> and table attributes is fine */
 	html?: string
+	/**
+	 * A react-email or jsx-email element, e.g. `react: <Welcome name="Dana" />`. It is rendered to `html`,
+	 * and to `text` too unless you pass one. Needs `@react-email/render` (react-email) or `jsx-email`
+	 * installed in your app.
+	 */
+	react?: unknown
 	attachments?: Attachment[]
 	/** Send later (up to a year ahead) */
 	sendAt?: Date | string
@@ -122,7 +129,16 @@ export interface SendOptions {
 export interface ReplyOptions
 	extends Pick<
 		SendOptions,
-		'text' | 'html' | 'attachments' | 'sendAt' | 'idempotencyKey' | 'name' | 'wait' | 'headers' | 'unsubscribe'
+		| 'text'
+		| 'html'
+		| 'react'
+		| 'attachments'
+		| 'sendAt'
+		| 'idempotencyKey'
+		| 'name'
+		| 'wait'
+		| 'headers'
+		| 'unsubscribe'
 	> {
 	/** Also to everyone else on the original */
 	replyAll?: boolean
@@ -222,6 +238,28 @@ function attachmentBody(a: Attachment) {
 	else if (a.content) content = bytesToBase64(a.content)
 	else throw new Error(`Attachment ${a.filename} has no content`)
 	return { filename: a.filename, content, contentType: a.contentType, cid: a.cid }
+}
+
+type Renderer = { render?: (element: unknown, options?: { plainText?: boolean }) => string | Promise<string> }
+
+/** Loads a renderer the app has installed; the SDK depends on neither. */
+async function loadRenderer(name: string): Promise<Renderer | null> {
+	try {
+		return (await import(/* webpackIgnore: true */ /* @vite-ignore */ name)) as Renderer
+	} catch {
+		return null
+	}
+}
+
+/** The html and text to send: as given, or rendered from a react-email / jsx-email element. */
+async function bodiesOf(o: { html?: string; text?: string; react?: unknown }) {
+	if (o.react === undefined || o.react === null) return { html: o.html, text: o.text }
+	const renderer = (await loadRenderer('@react-email/render')) ?? (await loadRenderer('jsx-email'))
+	if (!renderer?.render)
+		throw new Error('mailroom-sdk: `react` needs @react-email/render (react-email) or jsx-email installed in your app')
+	const html = o.html ?? (await renderer.render(o.react))
+	const text = o.text ?? (await renderer.render(o.react, { plainText: true }))
+	return { html, text }
 }
 
 const toList = (v: AddressInput | undefined) => (v === undefined ? undefined : Array.isArray(v) ? v : [v])
@@ -448,8 +486,7 @@ export class Mailroom {
 			bcc: toList(options.bcc),
 			replyTo: toList(options.replyTo),
 			subject: options.subject,
-			text: options.text,
-			html: options.html,
+			...(await bodiesOf(options)),
 			attachments: options.attachments?.map(attachmentBody),
 			sendAt: options.sendAt instanceof Date ? options.sendAt.toISOString() : options.sendAt,
 			idempotencyKey: options.idempotencyKey,
@@ -464,8 +501,7 @@ export class Mailroom {
 			'POST',
 			`/messages/${encodeURIComponent(messageId)}/reply`,
 			{
-				text: options.text,
-				html: options.html,
+				...(await bodiesOf(options)),
 				replyAll: options.replyAll,
 				fromName: options.name,
 				attachments: options.attachments?.map(attachmentBody),

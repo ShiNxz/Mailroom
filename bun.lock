@@ -73,10 +73,18 @@
     },
     "packages/sdk": {
       "name": "mailroom-sdk",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "devDependencies": {
         "typescript": "^5.9.3",
       },
+      "peerDependencies": {
+        "@react-email/render": ">=1",
+        "jsx-email": ">=2",
+      },
+      "optionalPeers": [
+        "@react-email/render",
+        "jsx-email",
+      ],
     },
     "packages/shared": {
       "name": "@mailroom/shared",

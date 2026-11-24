@@ -69,7 +69,8 @@ export const composeRoutes = new Elysia()
 	.post(
 		'/send',
 		async ({ user, body }) => {
-			const p = body.payload as ComposePayload
+			// Composer mail is always cleaned before sending; only API sends go out as given
+			const p: ComposePayload = { ...(body.payload as ComposePayload), rawHtml: false }
 			await assertMailboxAccess(user, p.mailboxId)
 			if (!p.to.length && !p.cc.length && !p.bcc.length) throw badRequest('Add at least one recipient')
 			if (p.replyToMessageId || p.forwardOfMessageId) {

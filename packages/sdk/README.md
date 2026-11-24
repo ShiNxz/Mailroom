@@ -36,6 +36,17 @@ await billing.send({ to: 'dana@client.com', subject: 'Invoice', html: '<p>Attach
 
 Pass an `idempotencyKey` to make retries safe: the same key sends once. `sendAt` schedules a message.
 
+HTML goes out exactly as you pass it, so a full template with `<head>`, `<style>` and table attributes
+arrives intact. React templates work directly: pass a react-email or jsx-email element as `react` and it is
+rendered to `html` and a plain `text` part. Install the renderer your templates use
+(`@react-email/render` or `jsx-email`); the SDK doesn't bundle either.
+
+```tsx
+import { Welcome } from './emails/welcome'
+
+await support.send({ to, subject: 'Welcome', react: <Welcome name="Dana" /> })
+```
+
 Images inside the message (a logo, icons) are attachments with a `cid`, shown where the html points at them.
 Unlike linked images, mail clients show them without asking:
 
