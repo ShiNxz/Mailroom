@@ -1,7 +1,7 @@
 'use client'
 
 import { type Branding, DEFAULT_BRANDING, isAdminRole, type Template } from '@mailroom/shared'
-import { Button, Card, Description, Input, Label, ListBox, Modal, Select, Switch, TextField } from '@heroui/react'
+import { Button, Description, Input, Label, ListBox, Modal, Select, Switch, TextField } from '@heroui/react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -9,20 +9,11 @@ import useSWR, { mutate } from 'swr'
 import { BrandMark, useBranding } from '@/components/Brand'
 import { MailEditor } from '@/components/compose/Editor'
 import { toggleTheme } from '@/components/Sidebar'
+import { ApiTokens } from '@/components/settings/ApiTokens'
+import { Section } from '@/components/settings/Section'
+import { SecuritySettings } from '@/components/settings/SecuritySettings'
 import { IconButton, Loading } from '@/components/ui'
 import { api, fetcher, refreshBootstrap, useBootstrap, useMe } from '@/lib/api'
-
-function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-	return (
-		<Card>
-			<Card.Header>
-				<Card.Title>{title}</Card.Title>
-				{description && <Card.Description>{description}</Card.Description>}
-			</Card.Header>
-			<Card.Content className="flex flex-col gap-4">{children}</Card.Content>
-		</Card>
-	)
-}
 
 function Profile() {
 	const { data: me, mutate } = useMe()
@@ -35,7 +26,7 @@ function Profile() {
 	const saveSettings = async (patch: Record<string, unknown>) => {
 		try {
 			const r = await api<{ user: NonNullable<typeof me>['user'] }>('/auth/me', { method: 'PATCH', body: patch })
-			void mutate({ user: r.user }, { revalidate: false })
+			void mutate(prev => (prev ? { ...prev, user: r.user } : prev), { revalidate: false })
 		} catch (err) {
 			toast.error((err as Error).message)
 		}
@@ -438,6 +429,8 @@ export default function SettingsPage() {
 			<div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-24 sm:p-8">
 				<h1 className="pl-10 text-2xl font-semibold lg:pl-0">Settings</h1>
 				<Profile />
+				<SecuritySettings />
+				<ApiTokens />
 				{isAdminRole(me.user.role) && <BrandingSettings />}
 				<Signatures />
 				<Templates />

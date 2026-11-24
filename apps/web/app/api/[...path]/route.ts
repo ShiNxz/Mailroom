@@ -6,7 +6,15 @@ import type { NextRequest } from 'next/server'
 const API_URL = (process.env.API_URL ?? 'http://localhost:3001').replace(/\/$/, '')
 
 // origin: the API refuses cross-site writes, and passkeys are checked against it
-const FORWARDED_REQUEST_HEADERS = ['cookie', 'content-type', 'authorization', 'accept', 'user-agent', 'last-event-id', 'origin']
+const FORWARDED_REQUEST_HEADERS = [
+	'cookie',
+	'content-type',
+	'authorization',
+	'accept',
+	'user-agent',
+	'last-event-id',
+	'origin',
+]
 // fetch() already decoded the body, and Node sets its own framing headers
 const DROPPED_RESPONSE_HEADERS = new Set([
 	'connection',
@@ -22,7 +30,8 @@ async function proxy(request: NextRequest, { params }: { params: Promise<{ path:
 	const { path } = await params
 	const url = new URL(request.url)
 	const target = `${API_URL}/${path.map(encodeURIComponent).join('/')}${url.search}`
-	const isStream = path[0] === 'events'
+	// Event streams stay open (the app's own, and the API's /stream for tokens)
+	const isStream = path.length === 1 && (path[0] === 'events' || path[0] === 'stream')
 	const isUpload = path[0] === 'uploads'
 
 	const headers = new Headers()

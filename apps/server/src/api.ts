@@ -54,9 +54,17 @@ const app = new Elysia()
 	.use(eventRoutes)
 	.use(tokenRoutes)
 	.use(appRoutes)
-	.listen({ port: env.port, hostname: '0.0.0.0', maxRequestBodySize: env.maxUploadBytes + 1024 * 1024, idleTimeout: 0 })
+	.listen({
+		port: env.port,
+		hostname: '0.0.0.0',
+		// API sends carry attachments as base64, a third bigger than the files
+		maxRequestBodySize: Math.ceil(env.maxUploadBytes * 1.4) + 1024 * 1024,
+		idleTimeout: 0,
+	})
 
 log.info('api listening', { port: app.server?.port })
+if (!env.publicUrl)
+	log.warn('PUBLIC_URL is not set: passkeys use the browser origin and cross-site checks are off. Set it in production.')
 
 const stop = () => {
 	app.stop()

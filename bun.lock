@@ -71,6 +71,13 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/sdk": {
+      "name": "mailroom-sdk",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.9.3",
+      },
+    },
     "packages/shared": {
       "name": "@mailroom/shared",
       "devDependencies": {
@@ -658,6 +665,8 @@
     "magic-string": ["magic-string@1.4.5", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.6.0" } }, "sha512-oLLC2+YvQUfAa+vxoufE/yc1icb87M9iXIRqAoR/2EhE/8cb3SF/+Gi0c2By1B+5Vz2e2vQtUvHiu1+63Znh+w=="],
 
     "mailparser": ["mailparser@3.15.0", "", { "dependencies": { "@zone-eu/mailsplit": "5.4.31", "he": "1.2.0", "html-to-text": "10.0.1", "libmime": "5.6.5", "linkify-it": "6.1.0", "nodemailer": "10.6.1", "punycode.js": "2.3.1", "tlds": "1.261.0" } }, "sha512-vGKvLx7Hp9GEl0u+C/7V0v+ryYqwUksZSfNTvIqB8MM39AzQ5jrFgSxGXbpU9rVcDkt4hgRDVGneIme9oxLe3A=="],
+
+    "mailroom-sdk": ["mailroom-sdk@workspace:packages/sdk"],
 
     "memoirist": ["memoirist@0.4.0", "", {}, "sha512-zxTgA0mSYELa66DimuNQDvyLq36AwDlTuVRbnQtB+VuTcKWm5Qc4z3WkSpgsFWHNhexqkIooqpv4hdcqrX5Nmg=="],
 

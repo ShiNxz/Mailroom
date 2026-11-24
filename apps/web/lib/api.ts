@@ -1,4 +1,4 @@
-import type { Folder, Project, User } from '@mailroom/shared'
+import type { Folder, Project, SecurityStatus, User } from '@mailroom/shared'
 import { useEffect, useRef } from 'react'
 import useSWR, { mutate } from 'swr'
 
@@ -6,6 +6,7 @@ export class ApiError extends Error {
 	constructor(
 		readonly status: number,
 		message: string,
+		readonly code?: string,
 	) {
 		super(message)
 	}
@@ -30,11 +31,16 @@ export async function api<T>(
 		data = { error: text }
 	}
 	if (!res.ok) {
-		const message = (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`
-		if (res.status === 401 && typeof window !== 'undefined' && !path.startsWith('/auth/')) {
-			window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`
+		const body = data as { error?: string; code?: string } | null
+		const message = body?.error ?? `Request failed (${res.status})`
+		if (typeof window !== 'undefined') {
+			const here = encodeURIComponent(window.location.pathname + window.location.search)
+			if (res.status === 401 && !path.startsWith('/auth/')) window.location.href = `/login?next=${here}`
+			// Signed in, but no passkey or authenticator yet: the only place to go is setting one up
+			else if (body?.code === 'mfa_setup_required' && !window.location.pathname.startsWith('/security'))
+				window.location.href = `/security/setup?next=${here}`
 		}
-		throw new ApiError(res.status, message)
+		throw new ApiError(res.status, message, body?.code)
 	}
 	return data as T
 }
@@ -47,8 +53,13 @@ export interface Bootstrap {
 	counts: { drafts: number; scheduled: number; failed: number }
 }
 
+export interface Me {
+	user: User
+	security: SecurityStatus
+}
+
 export function useMe() {
-	return useSWR<{ user: User }>('/auth/me', fetcher, { revalidateOnFocus: false, shouldRetryOnError: false })
+	return useSWR<Me>('/auth/me', fetcher, { revalidateOnFocus: false, shouldRetryOnError: false })
 }
 
 export function useBootstrap() {

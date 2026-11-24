@@ -1,6 +1,6 @@
 import type { SecurityStatus, SessionInfo, UserSettings } from '@mailroom/shared'
 import type { RegistrationResponseJSON } from '@simplewebauthn/server'
-import { and, desc, eq, gt } from 'drizzle-orm'
+import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm'
 import { Elysia, t } from 'elysia'
 import {
 	COOKIE,
@@ -57,10 +57,23 @@ const sessionVerified = async (sessionId: string | null) => {
 	return !!s?.mfaAt
 }
 
-/** After the first factor: recovery codes (shown once) and this session counts as verified. */
+/**
+ * After the first factor: recovery codes (shown once), this session counts as verified, and any other
+ * setup-only sessions (a password typed somewhere else) are signed out: they could never be used again.
+ */
 async function firstFactorDone(caller: Caller, wasFirst: boolean) {
 	if (caller.sessionId) await markSessionVerified(caller.sessionId)
-	return wasFirst ? await newRecoveryCodes(caller.user.id) : null
+	if (!wasFirst) return null
+	await db
+		.delete(schema.sessions)
+		.where(
+			and(
+				eq(schema.sessions.userId, caller.user.id),
+				isNull(schema.sessions.mfaAt),
+				caller.sessionId ? ne(schema.sessions.id, caller.sessionId) : undefined,
+			),
+		)
+	return await newRecoveryCodes(caller.user.id)
 }
 
 async function assertNotLastFactor(userId: string, removing: 'passkey' | 'totp') {

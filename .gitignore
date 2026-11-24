@@ -8,3 +8,6 @@ next-env.d.ts
 .DS_Store
 apps/mac/build
 apps/mac/.build
+
+# SDK build output
+packages/sdk/dist

@@ -16,7 +16,7 @@ import {
 	Switch,
 	TextField,
 } from '@heroui/react'
-import { Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Pencil, Plus, ShieldCheck, ShieldOff, Trash2, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import useSWR from 'swr'
@@ -252,6 +252,23 @@ function UserDialog({
 	)
 }
 
+/** Whether the person set up a second factor. Without one they get the setup screen at their next sign-in. */
+function SignInChip({ signIn }: { signIn: UserWithAccess['signIn'] }) {
+	const parts = [
+		signIn.passkeys ? `${signIn.passkeys} passkey${signIn.passkeys === 1 ? '' : 's'}` : null,
+		signIn.totp ? 'authenticator' : null,
+	].filter(Boolean)
+	return parts.length ? (
+		<Chip size="sm" color="success" variant="soft">
+			<ShieldCheck className="size-3" /> {parts.join(' + ')}
+		</Chip>
+	) : (
+		<Chip size="sm" color="warning" variant="soft">
+			No second step yet
+		</Chip>
+	)
+}
+
 export default function UsersPage() {
 	const { data, isLoading, mutate } = useSWR<{ users: UserWithAccess[] }>('/admin/users', fetcher)
 	const { data: boot } = useBootstrap()
@@ -263,6 +280,22 @@ export default function UsersPage() {
 		if (!window.confirm(`Remove ${u.name}? Their drafts and scheduled mail are deleted too.`)) return
 		try {
 			await api(`/admin/users/${u.id}`, { method: 'DELETE' })
+			void mutate()
+		} catch (err) {
+			toast.error((err as Error).message)
+		}
+	}
+
+	const resetSignIn = async (u: UserWithAccess) => {
+		if (
+			!window.confirm(
+				`Reset ${u.name}'s sign-in? Their passkeys, authenticator app and recovery codes are removed and they are signed out everywhere. With their password they then set up a new one.`,
+			)
+		)
+			return
+		try {
+			await api(`/admin/users/${u.id}/reset-sign-in`, { body: {} })
+			toast.success(`${u.name} sets up a new passkey or authenticator at their next sign-in`)
 			void mutate()
 		} catch (err) {
 			toast.error((err as Error).message)
@@ -304,6 +337,7 @@ export default function UsersPage() {
 													Disabled
 												</Chip>
 											)}
+											<SignInChip signIn={u.signIn} />
 										</div>
 										<div className="truncate text-xs text-muted">{u.email}</div>
 										{u.role === 'member' && (
@@ -331,6 +365,11 @@ export default function UsersPage() {
 									<IconButton label="Edit" onPress={() => setDialog({ open: true, user: u })}>
 										<Pencil className="size-4" />
 									</IconButton>
+									{u.id !== me.user.id && (u.signIn.passkeys > 0 || u.signIn.totp) && (
+										<IconButton label="Reset sign-in (lost passkey or phone)" onPress={() => void resetSignIn(u)}>
+											<ShieldOff className="size-4" />
+										</IconButton>
+									)}
 									{u.role !== 'owner' && u.id !== me.user.id && (
 										<IconButton label="Remove" onPress={() => void remove(u)}>
 											<Trash2 className="size-4" />

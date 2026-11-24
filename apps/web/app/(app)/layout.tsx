@@ -46,8 +46,13 @@ function Shell({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		if (error) router.replace(`/login?next=${encodeURIComponent(pathname)}`)
 	}, [error])
+	// Signed in, but no passkey or authenticator yet: setting one up comes first
+	const unverified = !!me && !me.security.verified
+	useEffect(() => {
+		if (unverified) router.replace(`/security/setup?next=${encodeURIComponent(pathname)}`)
+	}, [unverified])
 
-	if (!me) return <Loading />
+	if (!me || unverified) return <Loading />
 
 	return (
 		<div className="flex h-dvh overflow-hidden bg-background">
