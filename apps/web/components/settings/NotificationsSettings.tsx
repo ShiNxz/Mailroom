@@ -1,6 +1,7 @@
 'use client'
 
-import { Alert, Button, Chip } from '@heroui/react'
+import type { User } from '@mailroom/shared'
+import { Alert, Button, Chip, Label, Switch } from '@heroui/react'
 import { formatDistanceToNow } from 'date-fns'
 import { BellRing, Download, Smartphone, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -9,7 +10,7 @@ import useSWR from 'swr'
 import { useBranding } from '@/components/Brand'
 import type { PushState } from '@/components/PwaBridge'
 import { IconButton } from '@/components/ui'
-import { api, fetcher } from '@/lib/api'
+import { api, fetcher, useBootstrap, useMe } from '@/lib/api'
 import {
 	canPromptInstall,
 	canPush,
@@ -160,6 +161,8 @@ export function NotificationsSettings() {
 				</div>
 			</div>
 
+			<NotifyMailboxes />
+
 			{others.length > 0 && (
 				<div className="flex flex-col gap-2 border-t border-separator pt-4">
 					<h3 className="text-sm font-medium">Your other devices</h3>
@@ -203,5 +206,115 @@ export function NotificationsSettings() {
 				</Alert>
 			)}
 		</Section>
+	)
+}
+
+/**
+ * Which mailboxes send a notification, for all of the person's devices. Only mailboxes they can open are
+ * listed; a mailbox they get later notifies until they turn it off.
+ */
+function NotifyMailboxes() {
+	const { data: boot } = useBootstrap()
+	const { data: me, mutate } = useMe()
+	const projects = (boot?.projects ?? []).filter(p => p.mailboxes.length > 0)
+	if (!me || !projects.length) return null
+	const muted = new Set(me.user.settings.notifyMuted ?? [])
+	const total = projects.reduce((n, p) => n + p.mailboxes.length, 0)
+	const on = total - projects.reduce((n, p) => n + p.mailboxes.filter(m => muted.has(m.id)).length, 0)
+
+	const save = async (next: Set<string>) => {
+		const notifyMuted = [...next]
+		void mutate(
+			prev => (prev ? { ...prev, user: { ...prev.user, settings: { ...prev.user.settings, notifyMuted } } } : prev),
+			{ revalidate: false },
+		)
+		try {
+			const r = await api<{ user: User }>('/push/muted', { method: 'PUT', body: { muted: notifyMuted } })
+			void mutate(prev => (prev ? { ...prev, user: r.user } : prev), { revalidate: false })
+		} catch (err) {
+			toast.error((err as Error).message)
+			void mutate()
+		}
+	}
+	const setMailbox = (id: string, notify: boolean) => {
+		const next = new Set(muted)
+		if (notify) next.delete(id)
+		else next.add(id)
+		void save(next)
+	}
+	const setProject = (ids: string[], notify: boolean) => {
+		const next = new Set(muted)
+		for (const id of ids) notify ? next.delete(id) : next.add(id)
+		void save(next)
+	}
+
+	return (
+		<div className="flex flex-col gap-3 border-t border-separator pt-4">
+			<div>
+				<h3 className="text-sm font-medium">Notify me about</h3>
+				<p className="text-xs text-muted">
+					{on === total
+						? 'Every mailbox you can open.'
+						: on === 0
+							? 'Nothing: every mailbox is off.'
+							: `${on} of ${total} mailboxes.`}{' '}
+					Applies to all your devices.
+				</p>
+			</div>
+			<div className="flex flex-col gap-3">
+				{projects.map(p => {
+					const ids = p.mailboxes.map(m => m.id)
+					const allOn = ids.every(id => !muted.has(id))
+					const someOn = ids.some(id => !muted.has(id))
+					return (
+						<div key={p.id} className="flex flex-col gap-1 rounded-xl border border-separator p-2">
+							<NotifySwitch
+								label={
+									<span className="inline-flex items-center gap-2 font-medium">
+										<span className="size-2.5 rounded-[4px]" style={{ background: p.color }} />
+										{p.name}
+										{someOn && !allOn && <span className="text-xs font-normal text-muted">some</span>}
+									</span>
+								}
+								on={someOn}
+								onChange={notify => setProject(ids, notify)}
+							/>
+							{p.mailboxes.length > 1 &&
+								p.mailboxes.map(m => (
+									<div key={m.id} className="pl-5">
+										<NotifySwitch
+											label={<span className="text-foreground/85">{m.address}</span>}
+											on={!muted.has(m.id)}
+											onChange={notify => setMailbox(m.id, notify)}
+										/>
+									</div>
+								))}
+						</div>
+					)
+				})}
+			</div>
+		</div>
+	)
+}
+
+function NotifySwitch({
+	label,
+	on,
+	onChange,
+}: {
+	label: React.ReactNode
+	on: boolean
+	onChange: (on: boolean) => void
+}) {
+	return (
+		<Switch isSelected={on} onChange={onChange} className="w-full">
+			{/* Content is the clickable part (HeroUI 3.2): the label and the knob both go inside it */}
+			<Switch.Content className="flex w-full flex-row items-center justify-between gap-3 px-1 py-1">
+				<Label className="text-sm">{label}</Label>
+				<Switch.Control>
+					<Switch.Thumb />
+				</Switch.Control>
+			</Switch.Content>
+		</Switch>
 	)
 }

@@ -347,20 +347,20 @@ export function MailboxDialog({
 											/>
 										</div>
 										<Switch isSelected={form.saveSent} onChange={v => set('saveSent', v)}>
-											<Switch.Control>
-												<Switch.Thumb />
-											</Switch.Control>
 											<Switch.Content>
+												<Switch.Control>
+													<Switch.Thumb />
+												</Switch.Control>
 												<Label>Save sent mail to the Sent folder</Label>
 												<Description>Turn off for Gmail and Microsoft 365, they do it themselves.</Description>
 											</Switch.Content>
 										</Switch>
 										{editing && (
 											<Switch isSelected={form.enabled} onChange={v => set('enabled', v)}>
-												<Switch.Control>
-													<Switch.Thumb />
-												</Switch.Control>
 												<Switch.Content>
+													<Switch.Control>
+														<Switch.Thumb />
+													</Switch.Control>
 													<Label>Sync this mailbox</Label>
 												</Switch.Content>
 											</Switch>

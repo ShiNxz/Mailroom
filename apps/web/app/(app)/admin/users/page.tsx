@@ -228,10 +228,10 @@ function UserDialog({
 						)}
 						{user && !isOwner && (
 							<Switch isSelected={disabled} onChange={setDisabled}>
-								<Switch.Control>
-									<Switch.Thumb />
-								</Switch.Control>
 								<Switch.Content>
+									<Switch.Control>
+										<Switch.Thumb />
+									</Switch.Control>
 									<Label>Disable this account</Label>
 									<Description>Signs them out everywhere and blocks sign-in.</Description>
 								</Switch.Content>

@@ -1,5 +1,7 @@
 import { and, count, eq } from 'drizzle-orm'
 import { Elysia, t } from 'elysia'
+import { accessibleMailboxIds } from '../access'
+import { toUser } from '../auth'
 import { sessionAuth } from '../context'
 import { db, schema } from '../db'
 import { HttpError, notFound } from '../lib/http'
@@ -68,6 +70,23 @@ export const pushRoutes = new Elysia({ prefix: '/push' })
 				label: t.String({ maxLength: 200 }),
 			}),
 		},
+	)
+
+	// Which mailboxes notify: the ones listed here don't, every other one the person can open does
+	.put(
+		'/muted',
+		async ({ user, body }) => {
+			const mine = new Set(await accessibleMailboxIds(user))
+			// Mailboxes they can't open stay out; one they lose access to drops out at the next save
+			const notifyMuted = [...new Set(body.muted)].filter(id => mine.has(id))
+			const [updated] = await db
+				.update(schema.users)
+				.set({ settings: { ...user.settings, notifyMuted } })
+				.where(eq(schema.users.id, user.id))
+				.returning()
+			return { user: toUser(updated!) }
+		},
+		{ body: t.Object({ muted: t.Array(t.String({ maxLength: 64 }), { maxItems: 1000 }) }) },
 	)
 
 	.delete('/devices/:id', async ({ user, params }) => {

@@ -18,6 +18,8 @@ export interface UserSettings {
 	notifications?: boolean
 	/** The person's own sidebar: order and hidden projects and mailboxes. */
 	sidebar?: SidebarPrefs
+	/** Mailboxes whose new mail does not send a push notification (every other one does, new ones too). */
+	notifyMuted?: string[]
 }
 
 /** Ids are kept in order; ones that no longer exist are ignored, new ones go after the known ones. */

@@ -186,7 +186,12 @@ export async function pushNewMail(messageId: string) {
 		const allowed = new Map<string, boolean>()
 		const sends: Promise<unknown>[] = []
 		for (const { device, user } of devices) {
-			if (!allowed.has(user.id)) allowed.set(user.id, (await accessibleMailboxIds(user)).includes(mailbox.id))
+			// Can open the mailbox right now, and didn't turn its notifications off (Settings > Notifications)
+			if (!allowed.has(user.id))
+				allowed.set(
+					user.id,
+					!user.settings.notifyMuted?.includes(mailbox.id) && (await accessibleMailboxIds(user)).includes(mailbox.id),
+				)
 			if (!allowed.get(user.id)) continue
 			if (!(await takeBurstSlot(device.id))) continue
 			sends.push(sendToDevice(device, message))

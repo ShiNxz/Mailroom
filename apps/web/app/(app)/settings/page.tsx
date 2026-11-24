@@ -103,10 +103,10 @@ function Profile() {
 						void saveSettings({ settings: { notifications: on } })
 					}}
 				>
-					<Switch.Control>
-						<Switch.Thumb />
-					</Switch.Control>
 					<Switch.Content>
+						<Switch.Control>
+							<Switch.Thumb />
+						</Switch.Control>
 						<Label>Desktop notifications for new mail</Label>
 						<Description>While Mailroom is open in a tab.</Description>
 					</Switch.Content>
@@ -115,10 +115,10 @@ function Profile() {
 					isSelected={settings.showImages ?? false}
 					onChange={on => void saveSettings({ settings: { showImages: on } })}
 				>
-					<Switch.Control>
-						<Switch.Thumb />
-					</Switch.Control>
 					<Switch.Content>
+						<Switch.Control>
+							<Switch.Thumb />
+						</Switch.Control>
 						<Label>Always show remote images</Label>
 						<Description>Off keeps tracking pixels from telling senders you opened their mail.</Description>
 					</Switch.Content>
