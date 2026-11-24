@@ -271,6 +271,13 @@ function MailPage() {
 									return n
 								})
 							}
+							onCheckMany={(ids, on) =>
+								setChecked(c => {
+									const n = new Set(c)
+									for (const id of ids) on ? n.add(id) : n.delete(id)
+									return n
+								})
+							}
 							onOpen={openThread}
 							onLoadMore={() => void setSize(size + 1)}
 							hasMore={hasMore}

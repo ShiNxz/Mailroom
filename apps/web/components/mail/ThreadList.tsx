@@ -2,9 +2,10 @@
 
 import type { Project, ThreadRow } from '@mailroom/shared'
 import { Checkbox } from '@heroui/react'
-import { Archive, Clock, MailOpen, Paperclip, Star, Trash2 } from 'lucide-react'
+import { Archive, CheckSquare, Clock, Mail, MailCheck, MailOpen, Paperclip, Star, Trash2 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
-import { snoozeOptions, threadAction } from '@/lib/actions'
+import { type MenuItem, useContextMenu } from '@/components/ContextMenu'
+import { snoozeOptions, type ThreadAction, threadAction } from '@/lib/actions'
 import { PersonAvatar } from '@/components/ui'
 import { displayName, listDate } from '@/lib/format'
 
@@ -13,6 +14,7 @@ export function ThreadList({
 	selectedId,
 	checked,
 	onCheck,
+	onCheckMany,
 	onOpen,
 	onLoadMore,
 	hasMore,
@@ -25,6 +27,8 @@ export function ThreadList({
 	selectedId: string | null
 	checked: Set<string>
 	onCheck: (id: string, on: boolean) => void
+	/** Picks or drops several at once (shift-click ranges, after a bulk action) */
+	onCheckMany: (ids: string[], on: boolean) => void
 	onOpen: (t: ThreadRow) => void
 	onLoadMore: () => void
 	hasMore: boolean
@@ -35,6 +39,80 @@ export function ThreadList({
 }) {
 	const sentinel = useRef<HTMLDivElement>(null)
 	const selecting = checked.size > 0
+	const menu = useContextMenu()
+	// The row a shift-click range starts from: the last one clicked, opened or picked
+	const anchor = useRef<string | null>(null)
+
+	// Click opens; cmd/ctrl-click picks one more; shift-click picks everything from the last row clicked
+	const click = (e: React.MouseEvent, t: ThreadRow) => {
+		if (e.shiftKey) {
+			const from = anchor.current ? threads.findIndex(x => x.threadId === anchor.current) : -1
+			const to = threads.findIndex(x => x.threadId === t.threadId)
+			if (from < 0) onCheck(t.threadId, true)
+			else {
+				const [a, b] = from < to ? [from, to] : [to, from]
+				onCheckMany(
+					threads.slice(a, b + 1).map(x => x.threadId),
+					true,
+				)
+			}
+			anchor.current = t.threadId
+			return
+		}
+		anchor.current = t.threadId
+		if (e.metaKey || e.ctrlKey) onCheck(t.threadId, !checked.has(t.threadId))
+		else onOpen(t)
+	}
+
+	const openMenu = (e: React.MouseEvent, t: ThreadRow) => {
+		// Right-clicking a picked row acts on everything picked; any other row, on that row alone
+		const ids = checked.has(t.threadId) && checked.size > 1 ? [...checked] : [t.threadId]
+		const rows = threads.filter(x => ids.includes(x.threadId))
+		const many = ids.length > 1
+		const act = (action: ThreadAction, removes = false, extra?: { until?: Date }) => {
+			if (removes) for (const id of ids) onRemoved(id)
+			if (many) onCheckMany(ids, false)
+			void threadAction(ids, action, extra)
+		}
+		const anyUnread = rows.some(r => r.unread)
+		const anyStarred = rows.some(r => r.starred)
+		const tomorrow = snoozeOptions().find(o => o.id === 'tomorrow')
+		const items: MenuItem[] = [
+			...(many ? [] : [{ id: 'open', label: 'Open', icon: <MailOpen />, onSelect: () => onOpen(t) }]),
+			{
+				id: 'read',
+				label: anyUnread ? 'Mark as read' : 'Mark as unread',
+				icon: anyUnread ? <MailCheck /> : <Mail />,
+				onSelect: () => act(anyUnread ? 'read' : 'unread'),
+			},
+			{
+				id: 'star',
+				label: anyStarred ? 'Remove star' : 'Star',
+				icon: <Star />,
+				onSelect: () => act(anyStarred ? 'unstar' : 'star'),
+			},
+			{ id: 'archive', label: 'Archive', icon: <Archive />, separator: true, onSelect: () => act('archive', true) },
+			...(tomorrow
+				? [
+						{
+							id: 'snooze',
+							label: 'Snooze until tomorrow',
+							icon: <Clock />,
+							onSelect: () => act('snooze', true, { until: tomorrow.date }),
+						},
+					]
+				: []),
+			{ id: 'trash', label: 'Move to Trash', icon: <Trash2 />, danger: true, onSelect: () => act('trash', true) },
+			{
+				id: 'pick',
+				label: many ? 'Clear selection' : checked.has(t.threadId) ? 'Unselect' : 'Select',
+				icon: <CheckSquare />,
+				separator: true,
+				onSelect: () => (many ? onCheckMany(ids, false) : onCheck(t.threadId, !checked.has(t.threadId))),
+			},
+		]
+		menu.open(e, items, many ? `${ids.length} conversations` : t.subject || '(no subject)')
+	}
 
 	useEffect(() => {
 		const el = sentinel.current
@@ -57,7 +135,10 @@ export function ThreadList({
 						<div
 							role="button"
 							tabIndex={0}
-							onClick={() => onOpen(t)}
+							onClick={e => click(e, t)}
+							// No text selection from shift-clicking a range
+							onMouseDown={e => e.shiftKey && e.preventDefault()}
+							onContextMenu={e => openMenu(e, t)}
 							onKeyDown={e => e.key === 'Enter' && onOpen(t)}
 							data-thread={t.threadId}
 							className={`group relative flex cursor-pointer gap-3 border-b border-separator px-4 py-3 outline-none transition-colors ${
@@ -104,9 +185,6 @@ export function ThreadList({
 										className="absolute top-2 right-3 z-10 hidden items-center gap-0.5 rounded-lg border border-separator bg-surface/95 p-0.5 shadow-sm backdrop-blur group-hover:flex"
 										onClick={e => e.stopPropagation()}
 									>
-										<span className="flex items-center px-1">
-											<RowCheckbox checked={isChecked} onChange={on => onCheck(t.threadId, on)} />
-										</span>
 										<HoverAction
 											label="Archive"
 											onClick={() => {
@@ -142,6 +220,10 @@ export function ThreadList({
 										>
 											<Clock />
 										</HoverAction>
+										{/* Last, at the right edge: where the other rows' checkboxes sit while picking */}
+										<span className="flex items-center px-1">
+											<RowCheckbox checked={isChecked} onChange={on => onCheck(t.threadId, on)} />
+										</span>
 									</span>
 								</div>
 								<div
@@ -178,6 +260,7 @@ export function ThreadList({
 					</li>
 				)
 			})}
+			{menu.element}
 			<div ref={sentinel} className="h-8">
 				{loadingMore && <p className="py-2 text-center text-xs text-muted">Loading more...</p>}
 			</div>

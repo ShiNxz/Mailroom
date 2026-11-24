@@ -34,6 +34,7 @@ import { ActiveIndicator } from '@/lib/motion'
 import { ordered, useSidebarPrefs } from '@/lib/sidebar'
 import { BrandMark, useBranding } from './Brand'
 import { useCompose } from './compose/context'
+import { type MenuItem, useContextMenu } from './ContextMenu'
 import { draggingClass, SortableGrip, SortableGroup, type SortableItem, useSortableItem } from './Sortable'
 import { SectionTitle, StatusDot, STATUS_LABEL } from './ui'
 
@@ -201,9 +202,50 @@ function MailboxNode({
 		})
 	const active = current.get('m') === mailbox.id && !current.get('f')
 	const [local, domain] = mailbox.address.split('@')
+	const menu = useContextMenu()
+	const router = useRouter()
+	const { open: compose } = useCompose()
+	const { data: me } = useMe()
+	const admin = me && isAdminRole(me.user.role)
+	const items: MenuItem[] = [
+		{
+			id: 'open',
+			label: 'Open inbox',
+			icon: <Inbox />,
+			onSelect: () => router.push(`/mail?view=inbox&m=${mailbox.id}`),
+		},
+		{
+			id: 'new',
+			label: 'New message from here',
+			icon: <PenSquare />,
+			onSelect: () => compose({ mailboxId: mailbox.id }),
+		},
+		{
+			id: 'hide',
+			label: hidden ? 'Show in sidebar' : 'Hide from sidebar',
+			icon: hidden ? <Eye /> : <EyeOff />,
+			separator: true,
+			onSelect: () => onHiddenChange(!hidden),
+		},
+		...(admin
+			? [
+					{
+						id: 'settings',
+						label: 'Mailbox settings',
+						icon: <Settings />,
+						onSelect: () => router.push(`/admin/projects?id=${mailbox.projectId}`),
+					},
+				]
+			: []),
+	]
 	return (
 		<>
-			<div {...sortable?.handle} className="group/row relative">
+			{menu.element}
+			<div
+				{...sortable?.handle}
+				className="group/row relative"
+				onContextMenu={e => menu.open(e, items, mailbox.address)}
+			>
 				{sortable?.enabled && <SortableGrip grip={sortable.grip} name={mailbox.address} />}
 				<NavRow
 					href={`/mail?view=inbox&m=${mailbox.id}`}
@@ -279,6 +321,52 @@ function ProjectNode({
 	const mailboxes = ordered(project.mailboxes, sidebar.prefs.mailboxOrder?.[project.id])
 	const shown = mailboxes.filter(m => !sidebar.hiddenMailboxes.has(m.id))
 	const hiddenHere = mailboxes.filter(m => sidebar.hiddenMailboxes.has(m.id))
+	const menu = useContextMenu()
+	const router = useRouter()
+	const { open: compose } = useCompose()
+	const { data: me } = useMe()
+	const admin = me && isAdminRole(me.user.role)
+	const items: MenuItem[] = [
+		{
+			id: 'open',
+			label: 'Open inbox',
+			icon: <Inbox />,
+			onSelect: () => router.push(`/mail?view=inbox&p=${project.id}`),
+		},
+		...(shown[0] || mailboxes[0]
+			? [
+					{
+						id: 'new',
+						label: 'New message',
+						icon: <PenSquare />,
+						onSelect: () => compose({ mailboxId: (shown[0] ?? mailboxes[0])!.id }),
+					},
+				]
+			: []),
+		{
+			id: 'expand',
+			label: open ? 'Collapse' : 'Expand',
+			icon: <ChevronRight className={open ? 'rotate-90' : ''} />,
+			onSelect: toggle,
+		},
+		{
+			id: 'hide',
+			label: hidden ? 'Show in sidebar' : 'Hide from sidebar',
+			icon: hidden ? <Eye /> : <EyeOff />,
+			separator: true,
+			onSelect: () => sidebar.setProjectHidden(project.id, !hidden),
+		},
+		...(admin
+			? [
+					{
+						id: 'settings',
+						label: 'Project settings',
+						icon: <Settings />,
+						onSelect: () => router.push(`/admin/projects?id=${project.id}`),
+					},
+				]
+			: []),
+	]
 	const setMailboxHidden = (id: string, hide: boolean) => {
 		// Showing the last hidden one folds the row, so the next hidden mailbox starts out of sight
 		if (!hide && hiddenHere.length === 1) setShowHidden(false)
@@ -286,7 +374,8 @@ function ProjectNode({
 	}
 	return (
 		<>
-			<div {...sortable?.handle} className="group/row relative">
+			{menu.element}
+			<div {...sortable?.handle} className="group/row relative" onContextMenu={e => menu.open(e, items, project.name)}>
 				{sortable?.enabled && <SortableGrip grip={sortable.grip} name={project.name} />}
 				<NavRow
 					href={`/mail?view=inbox&p=${project.id}`}
