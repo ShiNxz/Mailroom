@@ -129,12 +129,14 @@ interface SendInput {
 	sendAt?: string
 	idempotencyKey?: string
 	replyToMessageId?: string
+	headers?: Record<string, string>
 }
 
 async function queueSend(user: ScopedUser, token: ApiTokenRow | null, input: SendInput) {
 	if (!input.to.length && !input.cc.length && !input.bcc.length) throw badRequest('Add at least one recipient')
 	if (input.to.length + input.cc.length + input.bcc.length > 100) throw badRequest('Up to 100 recipients per message')
 	if (!input.text?.trim() && !input.html?.trim()) throw badRequest('Add a text or html body')
+	const headers = cleanHeaders(input.headers)
 	const key = input.idempotencyKey?.trim()
 	if (key) {
 		const [existing] = await db
@@ -188,6 +190,7 @@ async function queueSend(user: ScopedUser, token: ApiTokenRow | null, input: Sen
 				fromName: input.fromName?.replace(/[\r\n]/g, ' ').slice(0, 200) || null,
 				replyTo: input.replyTo,
 				replyToMessageId: input.replyToMessageId ?? null,
+				headers,
 				attachmentIds: uploads.map(u => u.id),
 			}
 			const [row] = await tx
@@ -219,8 +222,43 @@ async function queueSend(user: ScopedUser, token: ApiTokenRow | null, input: Sen
 	}
 }
 
+// Extra headers an app may set: mailing-list and automation headers, and its own X- headers. Everything
+// Mailroom writes itself (From, To, Subject, Message-ID, Date, MIME, threading) stays Mailroom's.
+const ALLOWED_HEADERS = new Set([
+	'list-unsubscribe',
+	'list-unsubscribe-post',
+	'list-id',
+	'list-help',
+	'list-subscribe',
+	'list-owner',
+	'list-archive',
+	'list-post',
+	'auto-submitted',
+	'precedence',
+	'feedback-id',
+])
+
+function cleanHeaders(input: Record<string, string> | undefined) {
+	if (!input) return null
+	const entries = Object.entries(input)
+	if (entries.length > 20) throw badRequest('Up to 20 extra headers')
+	const out: Record<string, string> = {}
+	for (const [name, value] of entries) {
+		const lower = name.trim().toLowerCase()
+		const custom = /^x-[a-z0-9-]{1,60}$/.test(lower) && lower !== 'x-mailer'
+		if (!ALLOWED_HEADERS.has(lower) && !custom)
+			throw badRequest(
+				`The ${name} header can't be set. Allowed: List-*, Auto-Submitted, Precedence, Feedback-ID and X- headers.`,
+			)
+		if (/[\r\n]/.test(value) || value.length > 998) throw badRequest(`${name}: one line, up to 998 characters`)
+		if (value.trim()) out[name.trim()] = value.trim()
+	}
+	return Object.keys(out).length ? out : null
+}
+
 const SendBodyT = {
 	fromName: t.Optional(t.String({ maxLength: 200 })),
+	headers: t.Optional(t.Record(t.String({ maxLength: 80 }), t.String({ maxLength: 1000 }))),
 	text: t.Optional(t.String({ maxLength: 5_000_000 })),
 	html: t.Optional(t.String({ maxLength: 5_000_000 })),
 	attachments: t.Optional(t.Array(AttachmentT, { maxItems: 20 })),

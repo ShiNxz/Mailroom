@@ -36,6 +36,17 @@ await billing.send({ to: 'dana@client.com', subject: 'Invoice', html: '<p>Attach
 
 Pass an `idempotencyKey` to make retries safe: the same key sends once. `sendAt` schedules a message.
 
+Bulk mail (newsletters, digests) needs a one-click unsubscribe for Gmail and Yahoo. Pass the https URL that
+unsubscribes this recipient when POSTed to, and both headers are set for you:
+
+```ts
+await news.send({ to, subject: 'Your weekly briefing', html, unsubscribe: `https://app.example.com/u/${token}` })
+```
+
+Other headers go in `headers`: the List-* headers, Auto-Submitted, Precedence, Feedback-ID and your own X- headers
+(`headers: { 'Auto-Submitted': 'auto-generated', 'List-Id': '<briefing.example.com>' }`). Mailroom's own headers
+(From, To, Subject, Message-ID and the like) can't be set.
+
 ## Receive
 
 ```ts
@@ -82,7 +93,7 @@ It is plain HTTP under `/api` with `Authorization: Bearer <token>`:
 | `GET /api/messages?mailbox=&folder=&unread=&q=&limit=&cursor=` | messages, newest first |
 | `GET /api/messages/:id` | one message with its bodies |
 | `PATCH /api/messages/:id` | `{ seen, flagged }` |
-| `POST /api/messages` | send: `{ from, fromName?, to, cc?, bcc?, replyTo?, subject, text?, html?, attachments?: [{ filename, content (base64), contentType? }], sendAt?, idempotencyKey?, inReplyTo? }` |
+| `POST /api/messages` | send: `{ from, fromName?, to, cc?, bcc?, replyTo?, subject, text?, html?, attachments?: [{ filename, content (base64), contentType? }], headers?, sendAt?, idempotencyKey?, inReplyTo? }` |
 | `POST /api/messages/:id/reply` | `{ text?, html?, replyAll?, attachments?, ... }` |
 | `GET /api/outbox/:id` | where a send is |
 | `GET /api/stream?after=` | server-sent events (`message.received`, `message.sent`, `message.failed`) |

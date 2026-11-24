@@ -102,10 +102,23 @@ export interface SendOptions {
 	inReplyTo?: string
 	/** Resolve once the message went out (or throw if it failed) instead of when it was queued */
 	wait?: boolean | { timeoutMs?: number }
+	/**
+	 * Extra headers: List-* (List-Unsubscribe, List-Id...), Auto-Submitted, Precedence, Feedback-ID and your
+	 * own X- headers. Mailroom's own headers (From, To, Subject, Message-ID...) can't be set.
+	 */
+	headers?: Record<string, string>
+	/**
+	 * One-click unsubscribe (RFC 8058), as Gmail and Yahoo require for bulk mail: an https URL that
+	 * unsubscribes the recipient when POSTed to. Sets List-Unsubscribe and List-Unsubscribe-Post.
+	 */
+	unsubscribe?: string
 }
 
 export interface ReplyOptions
-	extends Pick<SendOptions, 'text' | 'html' | 'attachments' | 'sendAt' | 'idempotencyKey' | 'name' | 'wait'> {
+	extends Pick<
+		SendOptions,
+		'text' | 'html' | 'attachments' | 'sendAt' | 'idempotencyKey' | 'name' | 'wait' | 'headers' | 'unsubscribe'
+	> {
 	/** Also to everyone else on the original */
 	replyAll?: boolean
 }
@@ -207,6 +220,18 @@ function attachmentBody(a: Attachment) {
 }
 
 const toList = (v: AddressInput | undefined) => (v === undefined ? undefined : Array.isArray(v) ? v : [v])
+
+/** The headers to send: the ones given, plus the two one-click unsubscribe headers. */
+function headersOf(o: { headers?: Record<string, string>; unsubscribe?: string }) {
+	if (!o.unsubscribe) return o.headers
+	const url = new URL(o.unsubscribe)
+	if (url.protocol !== 'https:') throw new Error('unsubscribe must be an https URL (RFC 8058)')
+	return {
+		...o.headers,
+		'List-Unsubscribe': `<${url.href}>`,
+		'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+	}
+}
 
 async function subtle(): Promise<SubtleCrypto> {
 	const c = (globalThis as { crypto?: Crypto }).crypto
@@ -424,6 +449,7 @@ export class Mailroom {
 			sendAt: options.sendAt instanceof Date ? options.sendAt.toISOString() : options.sendAt,
 			idempotencyKey: options.idempotencyKey,
 			inReplyTo: options.inReplyTo,
+			headers: headersOf(options),
 		})
 		return options.wait ? this.waitForSend(send.id, typeof options.wait === 'object' ? options.wait : {}) : send
 	}
@@ -440,6 +466,7 @@ export class Mailroom {
 				attachments: options.attachments?.map(attachmentBody),
 				sendAt: options.sendAt instanceof Date ? options.sendAt.toISOString() : options.sendAt,
 				idempotencyKey: options.idempotencyKey,
+				headers: headersOf(options),
 			},
 		)
 		return options.wait ? this.waitForSend(send.id, typeof options.wait === 'object' ? options.wait : {}) : send

@@ -222,6 +222,8 @@ export interface ComposePayload {
 	replyTo?: Address[]
 	/** Plain-text body. With html empty, the message goes out as text only. */
 	text?: string | null
+	/** Extra headers from API sends (List-Unsubscribe and the like); the server checks which are allowed. */
+	headers?: Record<string, string> | null
 }
 
 export interface OutboxItem {

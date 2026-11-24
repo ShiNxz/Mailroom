@@ -116,6 +116,8 @@ async function sendOne(item: OutboxRow, syncers: Map<string, MailboxSync>) {
 			disableFileAccess: true,
 			disableUrlAccess: true,
 			xMailer: 'Mailroom',
+			// From API sends: checked against an allow-list when queued (routes/app.ts)
+			headers: p.headers ?? undefined,
 		})
 		const node = composer.compile()
 		const raw = await node.build()
