@@ -317,6 +317,7 @@ function ProjectDetail({ project, onEdit }: { project: Project; onEdit: () => vo
 				isOpen={mailboxDialog.open}
 				onOpenChange={open => setMailboxDialog(s => ({ ...s, open }))}
 				projectId={project.id}
+				projectName={project.name}
 				mailboxId={mailboxDialog.id}
 				onSaved={reload}
 			/>

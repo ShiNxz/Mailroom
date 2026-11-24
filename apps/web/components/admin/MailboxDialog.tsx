@@ -77,12 +77,15 @@ export function MailboxDialog({
 	isOpen,
 	onOpenChange,
 	projectId,
+	projectName,
 	mailboxId,
 	onSaved,
 }: {
 	isOpen: boolean
 	onOpenChange: (v: boolean) => void
 	projectId: string
+	/** Suggests the sender name */
+	projectName: string
 	mailboxId?: string
 	onSaved: () => void
 }) {
@@ -266,7 +269,7 @@ export function MailboxDialog({
 									)}
 									<TextField value={form.displayName} onChange={v => set('displayName', v)}>
 										<Label>Sender name</Label>
-										<Input placeholder="SkinHub | Support" />
+										<Input placeholder={projectName || 'Your company'} />
 										<Description>The From name people see, next to the address.</Description>
 									</TextField>
 									<TextField
