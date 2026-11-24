@@ -14,7 +14,6 @@ import {
 	Inbox,
 	MailOpen,
 	ChevronDown,
-	MoreHorizontal,
 	MoreVertical,
 	Paperclip,
 	Reply,

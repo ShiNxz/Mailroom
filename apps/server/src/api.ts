@@ -12,6 +12,7 @@ import { brandingRoutes } from './routes/branding'
 import { composeRoutes } from './routes/compose'
 import { eventRoutes } from './routes/events'
 import { mailRoutes } from './routes/mail'
+import { prefsRoutes } from './routes/prefs'
 
 await runMigrations()
 
@@ -45,6 +46,7 @@ const app = new Elysia()
 	.use(adminRoutes)
 	.use(mailRoutes)
 	.use(composeRoutes)
+	.use(prefsRoutes)
 	.use(eventRoutes)
 	.listen({ port: env.port, hostname: '0.0.0.0', maxRequestBodySize: env.maxUploadBytes + 1024 * 1024, idleTimeout: 0 })
 

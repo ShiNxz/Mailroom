@@ -16,6 +16,17 @@ export interface UserSettings {
 	showImages?: boolean
 	/** Ask the browser for desktop notifications on new mail. */
 	notifications?: boolean
+	/** The person's own sidebar: order and hidden projects and mailboxes. */
+	sidebar?: SidebarPrefs
+}
+
+/** Ids are kept in order; ones that no longer exist are ignored, new ones go after the known ones. */
+export interface SidebarPrefs {
+	projectOrder?: string[]
+	/** Per project id: its mailboxes in order */
+	mailboxOrder?: Record<string, string[]>
+	hiddenProjects?: string[]
+	hiddenMailboxes?: string[]
 }
 
 export interface User {

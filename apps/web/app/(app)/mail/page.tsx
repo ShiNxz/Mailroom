@@ -12,6 +12,7 @@ import { ThreadView } from '@/components/mail/ThreadView'
 import { EmptyState, IconButton, Loading, StatusDot } from '@/components/ui'
 import { threadAction } from '@/lib/actions'
 import { fetcher, refreshBootstrap, useBootstrap, useListRefresh } from '@/lib/api'
+import { EnterOnChange } from '@/lib/motion'
 
 const VIEW_TITLES: Record<string, string> = {
 	inbox: 'Inbox',
@@ -242,7 +243,8 @@ function MailPage() {
 					</form>
 				)}
 				{statusLine}
-				<div className="pane-scroll min-h-0 flex-1">
+				{/* Switching mailbox, project, folder or view fades the list in with a small rise (Seylo's EnterOnChange) */}
+				<EnterOnChange motionKey={baseQuery} className="pane-scroll min-h-0 flex-1">
 					{view === 'scheduled' && !folderId ? (
 						<OutboxList />
 					) : view === 'drafts' && !folderId ? (
@@ -278,7 +280,7 @@ function MailPage() {
 							onRemoved={removed}
 						/>
 					)}
-				</div>
+				</EnterOnChange>
 			</section>
 			<section className={`min-h-0 min-w-0 flex-1 ${threadId ? 'block' : 'hidden xl:block'}`}>
 				{threadId ? (

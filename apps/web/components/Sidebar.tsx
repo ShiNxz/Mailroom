@@ -7,11 +7,14 @@ import {
 	Archive,
 	ChevronRight,
 	Clock,
+	Eye,
+	EyeOff,
 	FileText,
 	Folder as FolderIcon,
 	Inbox,
 	LogOut,
 	Moon,
+	MoreHorizontal,
 	PenSquare,
 	Plus,
 	Send,
@@ -27,8 +30,11 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { type ReactNode, useEffect, useState } from 'react'
 import { api, useBootstrap, useMe } from '@/lib/api'
+import { ActiveIndicator } from '@/lib/motion'
+import { ordered, useSidebarPrefs } from '@/lib/sidebar'
 import { BrandMark, useBranding } from './Brand'
 import { useCompose } from './compose/context'
+import { draggingClass, SortableGrip, SortableGroup, type SortableItem, useSortableItem } from './Sortable'
 import { SectionTitle, StatusDot, STATUS_LABEL } from './ui'
 
 const VIEWS: { view: View; label: string; icon: ReactNode }[] = [
@@ -52,8 +58,9 @@ function NavRow({
 	label,
 	count,
 	indent = 0,
-	trailing,
+	leading,
 	muted,
+	countHidesOnHover,
 }: {
 	href: string
 	active: boolean
@@ -61,28 +68,72 @@ function NavRow({
 	label: ReactNode
 	count?: number
 	indent?: number
-	trailing?: ReactNode
+	/** Before the icon: a project's or mailbox's expand chevron */
+	leading?: ReactNode
 	muted?: boolean
+	/** The row's "..." menu shows over the count on hover */
+	countHidesOnHover?: boolean
 }) {
 	return (
 		<Link
 			href={href}
-			className={`group flex h-8 items-center gap-2.5 rounded-lg pr-2 text-sm transition-colors [&_svg]:size-4 [&_svg]:shrink-0 ${
-				active
-					? 'bg-accent/12 font-medium text-foreground'
-					: `${muted ? 'text-muted' : 'text-foreground/85'} hover:bg-default`
+			className={`relative isolate flex h-8 items-center gap-2 rounded-lg pr-2 text-sm transition-colors [&_svg]:size-4 [&_svg]:shrink-0 ${
+				active ? 'font-medium text-foreground' : `${muted ? 'text-muted' : 'text-foreground/85'} hover:bg-default`
 			}`}
-			style={{ paddingLeft: 10 + indent * 14 }}
+			style={{ paddingLeft: (leading ? 4 : 10) + indent * 14 }}
 		>
+			{/* One background for the whole sidebar that slides to the row you open (layoutId, as in Seylo) */}
+			{active && <ActiveIndicator layoutId="sidebar-active" className="rounded-lg bg-accent/12" />}
+			{leading}
 			{icon && <span className={active ? 'text-accent' : 'text-muted'}>{icon}</span>}
 			<span className="min-w-0 flex-1 truncate">{label}</span>
-			{trailing}
 			{!!count && (
-				<span className={`text-xs tabular-nums ${active ? 'text-foreground' : 'text-muted'}`}>
+				<span
+					className={`text-xs tabular-nums ${active ? 'text-foreground' : 'text-muted'} ${
+						countHidesOnHover
+							? 'transition-opacity group-hover/row:opacity-0 group-has-[[aria-expanded=true]]/row:opacity-0'
+							: ''
+					}`}
+				>
 					{count > 999 ? '999+' : count}
 				</span>
 			)}
 		</Link>
+	)
+}
+
+/** Hide or show a project or mailbox in the sidebar. Sits over the row's count, shown on hover. */
+function RowMenu({
+	name,
+	hidden,
+	onHiddenChange,
+}: {
+	name: string
+	hidden: boolean
+	onHiddenChange: (hide: boolean) => void
+}) {
+	return (
+		<div className="absolute top-1/2 right-1 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100 pointer-coarse:opacity-100">
+			<Dropdown>
+				<Button
+					isIconOnly
+					variant="ghost"
+					size="sm"
+					aria-label={`More for ${name}`}
+					className="size-6 min-w-6 rounded-md"
+				>
+					<MoreHorizontal className="size-3.5" />
+				</Button>
+				<Dropdown.Popover placement="bottom end">
+					<Dropdown.Menu onAction={() => onHiddenChange(!hidden)}>
+						<Dropdown.Item id="hide" textValue={hidden ? 'Show in sidebar' : 'Hide from sidebar'}>
+							{hidden ? <Eye className="size-4 text-muted" /> : <EyeOff className="size-4 text-muted" />}
+							<Label>{hidden ? 'Show in sidebar' : 'Hide from sidebar'}</Label>
+						</Dropdown.Item>
+					</Dropdown.Menu>
+				</Dropdown.Popover>
+			</Dropdown>
+		</div>
 	)
 }
 
@@ -104,24 +155,42 @@ function useExpanded(key: string, initial = false) {
 	return [open, toggle] as const
 }
 
-function Chevron({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+function Chevron({ open, onToggle, label }: { open: boolean; onToggle: () => void; label: string }) {
 	return (
 		<button
 			type="button"
-			aria-label={open ? 'Collapse' : 'Expand'}
+			aria-label={`${open ? 'Collapse' : 'Expand'} ${label}`}
+			aria-expanded={open}
 			onClick={e => {
 				e.preventDefault()
 				e.stopPropagation()
 				onToggle()
 			}}
-			className="-ml-1 rounded p-0.5 text-muted hover:bg-surface hover:text-foreground"
+			className="flex size-5 shrink-0 items-center justify-center rounded text-muted hover:text-foreground"
 		>
-			<ChevronRight className={`size-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+			<ChevronRight className={`size-3.5! transition-transform ${open ? 'rotate-90' : ''}`} />
 		</button>
 	)
 }
 
-function MailboxNode({ mailbox, folders, current }: { mailbox: Mailbox; folders: Folder[]; current: URLSearchParams }) {
+/** Keeps rows without children lined up with the ones that have a chevron */
+const ChevronSpace = () => <span className="size-5 shrink-0" />
+
+function MailboxNode({
+	mailbox,
+	folders,
+	current,
+	hidden,
+	onHiddenChange,
+	sortable,
+}: {
+	mailbox: Mailbox
+	folders: Folder[]
+	current: URLSearchParams
+	hidden: boolean
+	onHiddenChange: (hide: boolean) => void
+	sortable?: SortableItem
+}) {
 	const [open, toggle] = useExpanded(`mb:${mailbox.id}`)
 	const mine = folders
 		.filter(f => f.mailboxId === mailbox.id && f.specialUse !== 'flagged')
@@ -133,36 +202,44 @@ function MailboxNode({ mailbox, folders, current }: { mailbox: Mailbox; folders:
 	const active = current.get('m') === mailbox.id && !current.get('f')
 	const [local, domain] = mailbox.address.split('@')
 	return (
-		<div>
-			<NavRow
-				href={`/mail?view=inbox&m=${mailbox.id}`}
-				active={active}
-				indent={1}
-				icon={
-					<Tooltip delay={300}>
-						<Tooltip.Trigger>
-							<span className="flex size-4 items-center justify-center">
-								<StatusDot status={mailbox.status} />
-							</span>
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							{STATUS_LABEL[mailbox.status]}
-							{mailbox.status === 'syncing' &&
-								mailbox.totalCount > 0 &&
-								` · ${Math.min(100, Math.round((mailbox.syncedCount / mailbox.totalCount) * 100))}%`}
-							{mailbox.statusMessage && `: ${mailbox.statusMessage}`}
-						</Tooltip.Content>
-					</Tooltip>
-				}
-				label={
-					<span title={mailbox.address}>
-						{local}
-						<span className="text-muted">@{domain}</span>
-					</span>
-				}
-				count={mailbox.unread}
-				trailing={mine.length > 0 && <Chevron open={open} onToggle={toggle} />}
-			/>
+		<>
+			<div {...sortable?.handle} className="group/row relative">
+				{sortable?.enabled && <SortableGrip grip={sortable.grip} name={mailbox.address} />}
+				<NavRow
+					href={`/mail?view=inbox&m=${mailbox.id}`}
+					active={active}
+					indent={1}
+					muted={hidden}
+					countHidesOnHover
+					leading={
+						mine.length > 0 ? <Chevron open={open} onToggle={toggle} label={mailbox.address} /> : <ChevronSpace />
+					}
+					icon={
+						<Tooltip delay={300}>
+							<Tooltip.Trigger>
+								<span className="flex size-4 items-center justify-center">
+									<StatusDot status={mailbox.status} />
+								</span>
+							</Tooltip.Trigger>
+							<Tooltip.Content>
+								{STATUS_LABEL[mailbox.status]}
+								{mailbox.status === 'syncing' &&
+									mailbox.totalCount > 0 &&
+									` · ${Math.min(100, Math.round((mailbox.syncedCount / mailbox.totalCount) * 100))}%`}
+								{mailbox.statusMessage && `: ${mailbox.statusMessage}`}
+							</Tooltip.Content>
+						</Tooltip>
+					}
+					label={
+						<span title={mailbox.address}>
+							{local}
+							<span className="text-muted">@{domain}</span>
+						</span>
+					}
+					count={mailbox.unread}
+				/>
+				<RowMenu name={mailbox.address} hidden={hidden} onHiddenChange={onHiddenChange} />
+			</div>
 			{open &&
 				mine.map(f => (
 					<NavRow
@@ -170,37 +247,215 @@ function MailboxNode({ mailbox, folders, current }: { mailbox: Mailbox; folders:
 						href={`/mail?f=${f.id}`}
 						active={current.get('f') === f.id}
 						indent={2}
+						leading={<ChevronSpace />}
 						icon={<FolderIcon />}
 						label={f.name}
 						count={f.specialUse === 'inbox' || !f.specialUse ? f.unread : undefined}
 						muted
 					/>
 				))}
+		</>
+	)
+}
+
+function ProjectNode({
+	project,
+	folders,
+	current,
+	hidden,
+	sortable,
+}: {
+	project: Project
+	folders: Folder[]
+	current: URLSearchParams
+	hidden: boolean
+	sortable?: SortableItem
+}) {
+	const [open, toggle] = useExpanded(`p:${project.id}`, true)
+	const [showHidden, setShowHidden] = useState(false)
+	const sidebar = useSidebarPrefs()
+	const unread = project.mailboxes.reduce((s, m) => s + m.unread, 0)
+	const hasError = project.mailboxes.some(m => m.status === 'error')
+	const mailboxes = ordered(project.mailboxes, sidebar.prefs.mailboxOrder?.[project.id])
+	const shown = mailboxes.filter(m => !sidebar.hiddenMailboxes.has(m.id))
+	const hiddenHere = mailboxes.filter(m => sidebar.hiddenMailboxes.has(m.id))
+	const setMailboxHidden = (id: string, hide: boolean) => {
+		// Showing the last hidden one folds the row, so the next hidden mailbox starts out of sight
+		if (!hide && hiddenHere.length === 1) setShowHidden(false)
+		sidebar.setMailboxHidden(id, hide)
+	}
+	return (
+		<>
+			<div {...sortable?.handle} className="group/row relative">
+				{sortable?.enabled && <SortableGrip grip={sortable.grip} name={project.name} />}
+				<NavRow
+					href={`/mail?view=inbox&p=${project.id}`}
+					active={current.get('p') === project.id && !current.get('m') && !current.get('f')}
+					muted={hidden}
+					countHidesOnHover
+					leading={
+						project.mailboxes.length > 0 ? (
+							<Chevron open={open} onToggle={toggle} label={project.name} />
+						) : (
+							<ChevronSpace />
+						)
+					}
+					icon={<span className="block size-2.5 rounded-[4px]" style={{ background: project.color }} />}
+					label={
+						<span className="inline-flex items-center gap-1.5">
+							{project.name}
+							{hasError && <span className="size-1.5 rounded-full bg-danger" title="A mailbox has a problem" />}
+						</span>
+					}
+					count={unread}
+				/>
+				<RowMenu
+					name={project.name}
+					hidden={hidden}
+					onHiddenChange={hide => sidebar.setProjectHidden(project.id, hide)}
+				/>
+			</div>
+			{open && (
+				<>
+					<SortableGroup
+						ids={shown.map(m => m.id)}
+						onMove={ids =>
+							sidebar.setMailboxOrder(
+								project.id,
+								ids,
+								mailboxes.map(m => m.id),
+							)
+						}
+						disabled={hidden}
+					>
+						{shown.map(m => (
+							<SortableRow key={m.id} id={m.id}>
+								{item => (
+									<MailboxNode
+										mailbox={m}
+										folders={folders}
+										current={current}
+										hidden={false}
+										onHiddenChange={hide => setMailboxHidden(m.id, hide)}
+										sortable={item}
+									/>
+								)}
+							</SortableRow>
+						))}
+					</SortableGroup>
+					{hiddenHere.length > 0 && (
+						<>
+							<HiddenToggle
+								open={showHidden}
+								onToggle={() => setShowHidden(v => !v)}
+								count={hiddenHere.length}
+								what="mailbox"
+								indent={1}
+							/>
+							{showHidden &&
+								hiddenHere.map(m => (
+									<MailboxNode
+										key={m.id}
+										mailbox={m}
+										folders={folders}
+										current={current}
+										hidden
+										onHiddenChange={hide => setMailboxHidden(m.id, hide)}
+									/>
+								))}
+						</>
+					)}
+				</>
+			)}
+		</>
+	)
+}
+
+/** "Hidden (N)": folds the hidden projects or mailboxes away at the end of their list. */
+function HiddenToggle({
+	open,
+	onToggle,
+	count,
+	what,
+	indent = 0,
+}: {
+	open: boolean
+	onToggle: () => void
+	count: number
+	what: 'project' | 'mailbox'
+	indent?: number
+}) {
+	return (
+		<button
+			type="button"
+			aria-expanded={open}
+			onClick={onToggle}
+			className="flex h-7 w-full items-center gap-2 rounded-lg pr-2 text-left text-xs text-muted transition-colors hover:bg-default hover:text-foreground"
+			style={{ paddingLeft: 4 + indent * 14 }}
+		>
+			<span className="flex size-5 items-center justify-center">
+				<ChevronRight className={`size-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+			</span>
+			Hidden {what === 'project' ? 'projects' : count === 1 ? 'mailbox' : 'mailboxes'} ({count})
+		</button>
+	)
+}
+
+/** A project or mailbox in the person's order: it drags by its row (a click still opens it). */
+function SortableRow({ id, children }: { id: string; children: (item: SortableItem) => ReactNode }) {
+	const item = useSortableItem(id)
+	return (
+		<div ref={item.ref} style={item.style} className={draggingClass(item.dragging)}>
+			{children(item)}
 		</div>
 	)
 }
 
-function ProjectNode({ project, folders, current }: { project: Project; folders: Folder[]; current: URLSearchParams }) {
-	const [open, toggle] = useExpanded(`p:${project.id}`, true)
-	const unread = project.mailboxes.reduce((s, m) => s + m.unread, 0)
-	const hasError = project.mailboxes.some(m => m.status === 'error')
+/** Projects in the person's order, with the hidden ones folded at the end. */
+function ProjectsList({
+	projects,
+	folders,
+	current,
+}: {
+	projects: Project[]
+	folders: Folder[]
+	current: URLSearchParams
+}) {
+	const sidebar = useSidebarPrefs()
+	const [showHidden, setShowHidden] = useState(false)
+	const all = ordered(projects, sidebar.prefs.projectOrder)
+	const shown = all.filter(p => !sidebar.hiddenProjects.has(p.id))
+	const hidden = all.filter(p => sidebar.hiddenProjects.has(p.id))
 	return (
-		<div>
-			<NavRow
-				href={`/mail?view=inbox&p=${project.id}`}
-				active={current.get('p') === project.id && !current.get('m') && !current.get('f')}
-				icon={<span className="block size-2.5 rounded-[4px]" style={{ background: project.color }} />}
-				label={
-					<span className="inline-flex items-center gap-1.5">
-						{project.name}
-						{hasError && <span className="size-1.5 rounded-full bg-danger" title="A mailbox has a problem" />}
-					</span>
+		<>
+			<SortableGroup
+				ids={shown.map(p => p.id)}
+				onMove={ids =>
+					sidebar.setProjectOrder(
+						ids,
+						all.map(p => p.id),
+					)
 				}
-				count={unread}
-				trailing={project.mailboxes.length > 0 && <Chevron open={open} onToggle={toggle} />}
-			/>
-			{open && project.mailboxes.map(m => <MailboxNode key={m.id} mailbox={m} folders={folders} current={current} />)}
-		</div>
+			>
+				{shown.map(p => (
+					<SortableRow key={p.id} id={p.id}>
+						{item => <ProjectNode project={p} folders={folders} current={current} hidden={false} sortable={item} />}
+					</SortableRow>
+				))}
+			</SortableGroup>
+			{hidden.length > 0 && (
+				<>
+					<HiddenToggle
+						open={showHidden}
+						onToggle={() => setShowHidden(v => !v)}
+						count={hidden.length}
+						what="project"
+					/>
+					{showHidden &&
+						hidden.map(p => <ProjectNode key={p.id} project={p} folders={folders} current={current} hidden />)}
+				</>
+			)}
+		</>
 	)
 }
 
@@ -285,9 +540,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 				>
 					Projects
 				</SectionTitle>
-				{boot?.projects.map(p => (
-					<ProjectNode key={p.id} project={p} folders={boot.folders} current={params} />
-				))}
+				{boot && <ProjectsList projects={boot.projects} folders={boot.folders} current={params} />}
 				{boot && !boot.projects.length && (
 					<p className="px-3 py-2 text-xs text-muted">
 						{admin ? (

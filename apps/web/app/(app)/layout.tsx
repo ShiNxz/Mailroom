@@ -9,6 +9,7 @@ import { ComposeProvider, useCompose } from '@/components/compose/context'
 import { Sidebar } from '@/components/Sidebar'
 import { Loading } from '@/components/ui'
 import { useMe } from '@/lib/api'
+import { MotionProvider } from '@/lib/motion'
 import { useServerEvents } from '@/lib/events'
 
 function Shortcuts() {
@@ -89,8 +90,10 @@ function Shell({ children }: { children: ReactNode }) {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
 	return (
-		<ComposeProvider>
-			<Shell>{children}</Shell>
-		</ComposeProvider>
+		<MotionProvider>
+			<ComposeProvider>
+				<Shell>{children}</Shell>
+			</ComposeProvider>
+		</MotionProvider>
 	)
 }
