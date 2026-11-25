@@ -53,14 +53,20 @@ function MailPage() {
 		setHidden(new Set())
 	}, [view, projectId, mailboxId, folderId, q])
 
+	// Opening a conversation or searching is a step in the browser's history, so back (and the mouse's back
+	// button) returns to the previous conversation. Only moving on from one that was just archived or deleted
+	// replaces the step, so back doesn't reopen it.
 	const setParams = useCallback(
-		(patch: Record<string, string | null>) => {
+		(patch: Record<string, string | null>, how: 'push' | 'replace' = 'push') => {
 			const next = new URLSearchParams(params.toString())
 			for (const [k, v] of Object.entries(patch)) {
 				if (v === null || v === '') next.delete(k)
 				else next.set(k, v)
 			}
-			router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+			if (next.toString() === params.toString()) return
+			const url = `${pathname}?${next.toString()}`
+			if (how === 'push') router.push(url, { scroll: false })
+			else router.replace(url, { scroll: false })
 		},
 		[params, pathname, router],
 	)
@@ -117,7 +123,24 @@ function MailPage() {
 			: project?.name
 	const showMailbox = !mailboxId && !folderId && mailboxes.length > 1
 
-	const openThread = (t: ThreadRow | null) => setParams({ t: t?.threadId ?? null })
+	// The URL of a conversation opened straight from the list. Closing it then steps back to that list instead
+	// of stacking another copy of it on top.
+	const openedFromList = useRef<string | null>(null)
+	const openThread = (t: ThreadRow | null, how: 'push' | 'replace' = 'push') => {
+		const next = new URLSearchParams(params.toString())
+		if (t) next.set('t', t.threadId)
+		else next.delete('t')
+		if (how === 'push') openedFromList.current = t && !threadId ? next.toString() : null
+		// Moving on from an archived conversation keeps the list right under the new one
+		else if (openedFromList.current === params.toString()) openedFromList.current = t ? next.toString() : null
+		setParams({ t: t?.threadId ?? null }, how)
+	}
+	const closeThread = () => {
+		if (openedFromList.current === params.toString()) {
+			openedFromList.current = null
+			router.back()
+		} else openThread(null)
+	}
 
 	/** After archive/delete/snooze: hide the thread right away and move to the next one, like Gmail. */
 	const removed = (id: string) => {
@@ -125,7 +148,7 @@ function MailPage() {
 		if (threadId === id) {
 			const i = threads.findIndex(t => t.threadId === id)
 			const next = threads[i + 1] ?? threads[i - 1] ?? null
-			openThread(next && next.threadId !== id ? next : null)
+			openThread(next && next.threadId !== id ? next : null, 'replace')
 		}
 	}
 
@@ -143,7 +166,7 @@ function MailPage() {
 					document.querySelector(`[data-thread="${next.threadId}"]`)?.scrollIntoView({ block: 'nearest' })
 				}
 			} else if (e.key === '/') searchRef.current?.focus()
-			else if (e.key === 'Escape') openThread(null)
+			else if (e.key === 'Escape' && threadId) closeThread()
 			else if (e.key === 'x' && threadId)
 				setChecked(c => {
 					const n = new Set(c)
@@ -291,12 +314,7 @@ function MailPage() {
 			</section>
 			<section className={`min-h-0 min-w-0 flex-1 ${threadId ? 'block' : 'hidden xl:block'}`}>
 				{threadId ? (
-					<ThreadView
-						key={threadId}
-						threadId={threadId}
-						onClose={() => openThread(null)}
-						onRemoved={() => removed(threadId)}
-					/>
+					<ThreadView key={threadId} threadId={threadId} onClose={closeThread} onRemoved={() => removed(threadId)} />
 				) : (
 					<EmptyState icon={<MailOpenIcon />} title="No conversation selected">
 						<span>
