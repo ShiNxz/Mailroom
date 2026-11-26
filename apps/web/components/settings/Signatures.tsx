@@ -62,7 +62,13 @@ export function Signatures() {
 							{editing === m.id ? (
 								<>
 									<div className="overflow-hidden rounded-xl border border-border bg-field">
-										<MailEditor value={html} onChange={setHtml} placeholder="Your name, title, phone" minHeight={80} />
+										<MailEditor
+											value={html}
+											onChange={setHtml}
+											placeholder="Your name, title, phone"
+											minHeight={80}
+											imageWidth={200}
+										/>
 									</div>
 									<div className="flex gap-2">
 										<Button size="sm" onPress={() => void save(m.id, html)}>

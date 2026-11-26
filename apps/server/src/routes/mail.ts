@@ -8,7 +8,7 @@ import { badRequest, HttpError, notFound } from '../lib/http'
 import { publishEvent, sendCommand } from '../lib/redis'
 import { describeConnectionError, imapClient, settingsOf } from '../mail/connect'
 import { textToHtml } from '../mail/parse'
-import { sanitizeEmailHtml } from '../mail/sanitize'
+import { sanitizeComposerHtml, sanitizeEmailHtml } from '../mail/sanitize'
 import { bootstrap } from '../serialize'
 
 type MessageRow = typeof schema.messages.$inferSelect
@@ -627,15 +627,17 @@ export const mailRoutes = new Elysia()
 					.delete(schema.signatures)
 					.where(and(eq(schema.signatures.userId, user.id), eq(schema.signatures.mailboxId, params.id)))
 			} else {
+				const html = sanitizeComposerHtml(body.html)
 				await db
 					.insert(schema.signatures)
-					.values({ userId: user.id, mailboxId: params.id, html: body.html })
+					.values({ userId: user.id, mailboxId: params.id, html })
 					.onConflictDoUpdate({
 						target: [schema.signatures.userId, schema.signatures.mailboxId],
-						set: { html: body.html },
+						set: { html },
 					})
 			}
 			return { ok: true }
 		},
-		{ body: t.Object({ html: t.Union([t.String({ maxLength: 50_000 }), t.Null()]) }) },
+		// Room for a logo or two: images travel inside the html (the editor shrinks them first)
+		{ body: t.Object({ html: t.Union([t.String({ maxLength: 1_000_000 }), t.Null()]) }) },
 	)

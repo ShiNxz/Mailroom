@@ -379,6 +379,7 @@ export function MailboxDialog({
 											onChange={v => set('signature', v)}
 											placeholder="Name, title, phone..."
 											minHeight={70}
+											imageWidth={200}
 										/>
 									</div>
 								</div>

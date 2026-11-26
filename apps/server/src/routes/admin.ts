@@ -12,6 +12,7 @@ import { HttpError, notFound } from '../lib/http'
 import { publishEvent, sendCommand } from '../lib/redis'
 import { autoconfigure } from '../mail/autoconfig'
 import { type ConnectionSettings, testImap, testSmtp } from '../mail/connect'
+import { sanitizeComposerHtml } from '../mail/sanitize'
 import { toDomain, toMailboxSettings } from '../serialize'
 
 const Security = t.Union([t.Literal('tls'), t.Literal('starttls'), t.Literal('none')])
@@ -454,7 +455,7 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
 					smtpPort: body.smtpPort,
 					smtpSecurity: body.smtpSecurity,
 					saveSent: body.saveSent ?? true,
-					signature: body.signature ?? '',
+					signature: sanitizeComposerHtml(body.signature ?? ''),
 				})
 				.returning()
 			await sendCommand({ type: 'mailbox-changed', mailboxId: m!.id })
@@ -468,7 +469,7 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
 				password: t.String({ minLength: 1, maxLength: 500 }),
 				displayName: t.Optional(t.String({ maxLength: 200 })),
 				saveSent: t.Optional(t.Boolean()),
-				signature: t.Optional(t.String({ maxLength: 50_000 })),
+				signature: t.Optional(t.String({ maxLength: 1_000_000 })),
 				skipTest: t.Optional(t.Boolean()),
 			}),
 		},
@@ -490,6 +491,7 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
 				.update(schema.mailboxes)
 				.set({
 					...rest,
+					...(rest.signature !== undefined ? { signature: sanitizeComposerHtml(rest.signature) } : {}),
 					...(password ? { secret: encryptSecret(password) } : {}),
 					...(connectionChanged ? { status: 'connecting' as const, statusMessage: null } : {}),
 				})
@@ -512,7 +514,7 @@ export const adminRoutes = new Elysia({ prefix: '/admin' })
 				password: t.Optional(t.String({ maxLength: 500 })),
 				displayName: t.Optional(t.String({ maxLength: 200 })),
 				saveSent: t.Optional(t.Boolean()),
-				signature: t.Optional(t.String({ maxLength: 50_000 })),
+				signature: t.Optional(t.String({ maxLength: 1_000_000 })),
 				enabled: t.Optional(t.Boolean()),
 			}),
 		},

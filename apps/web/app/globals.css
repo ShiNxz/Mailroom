@@ -84,6 +84,57 @@ body {
 .mr-editor .ProseMirror img {
 	max-width: 100%;
 }
+/* Images: a ring when selected, a handle on each corner to drag the size (shown on hover or selection) */
+.mr-editor [data-resize-container] {
+	max-width: 100%;
+	vertical-align: bottom;
+}
+.mr-editor [data-resize-wrapper] {
+	max-width: 100%;
+	border-radius: 3px;
+}
+.mr-editor .ProseMirror-selectednode [data-resize-wrapper],
+.mr-editor [data-resize-state="true"] [data-resize-wrapper] {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.mr-editor [data-resize-handle] {
+	z-index: 1;
+	width: 10px;
+	height: 10px;
+	border: 2px solid var(--background);
+	border-radius: 3px;
+	background: var(--accent);
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+.mr-editor [data-resize-container]:hover [data-resize-handle],
+.mr-editor .ProseMirror-selectednode [data-resize-handle],
+.mr-editor [data-resize-state="true"] [data-resize-handle] {
+	opacity: 1;
+}
+.mr-editor [data-resize-handle="top-left"] {
+	transform: translate(-50%, -50%);
+	cursor: nwse-resize;
+}
+.mr-editor [data-resize-handle="bottom-right"] {
+	transform: translate(50%, 50%);
+	cursor: nwse-resize;
+}
+.mr-editor [data-resize-handle="top-right"] {
+	transform: translate(50%, -50%);
+	cursor: nesw-resize;
+}
+.mr-editor [data-resize-handle="bottom-left"] {
+	transform: translate(-50%, 50%);
+	cursor: nesw-resize;
+}
+@media (pointer: coarse) {
+	.mr-editor [data-resize-handle] {
+		width: 16px;
+		height: 16px;
+	}
+}
 .mr-editor .ProseMirror p.is-editor-empty:first-child::before {
 	content: attr(data-placeholder);
 	color: var(--field-placeholder, var(--muted));
@@ -97,4 +148,9 @@ body {
 
 .signature-preview p {
 	margin: 0;
+}
+.signature-preview img {
+	display: inline-block;
+	max-width: 100%;
+	height: auto;
 }
