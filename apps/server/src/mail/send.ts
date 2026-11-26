@@ -6,6 +6,7 @@ import { errorMessage, log } from '../lib/log'
 import { recordMailEvent } from '../events/mail-events'
 import { publishEvent } from '../lib/redis'
 import { describeConnectionError, settingsOf, smtpTransport } from './connect'
+import { inlineDataImages } from './inline-images'
 import { htmlToText } from './parse'
 import { sanitizeComposerHtml } from './sanitize'
 import type { MailboxSync } from './sync'
@@ -109,7 +110,11 @@ async function sendOne(item: OutboxRow, syncers: Map<string, MailboxSync>) {
 		const messageId = `<${randomToken(18)}@${domain}>`
 		// API sends may be plain text only; the web composer always sends HTML
 		// Composer html is cleaned; an API send's html (react-email and the like) goes out as the app built it
-		const html = p.html.trim() ? (p.rawHtml ? p.html : sanitizeComposerHtml(p.html)) : null
+		const cleaned = p.html.trim() ? (p.rawHtml ? p.html : sanitizeComposerHtml(p.html)) : null
+		// Pasted images and signature logos travel as data: URLs; they go out as inline attachments instead
+		const inlined = cleaned ? inlineDataImages(cleaned) : null
+		const html = inlined?.html ?? null
+		if (inlined) attachments.push(...inlined.images)
 		const composer = new MailComposer({
 			from: { name: p.fromName?.trim() || mailbox.displayName, address: mailbox.address },
 			replyTo: p.replyTo?.length ? p.replyTo.map(a => ({ name: a.name, address: a.address })) : undefined,
@@ -124,7 +129,6 @@ async function sendOne(item: OutboxRow, syncers: Map<string, MailboxSync>) {
 			references: references.length ? references.join(' ') : undefined,
 			date: new Date(),
 			attachments,
-			attachDataUrls: true,
 			disableFileAccess: true,
 			disableUrlAccess: true,
 			xMailer: 'Mailroom',
