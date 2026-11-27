@@ -78,6 +78,20 @@ export function smtpTransport(s: ConnectionSettings) {
 	})
 }
 
+/**
+ * nodemailer reports every socket and TLS failure as ESOCKET (a certificate for another host included),
+ * so the real cause is read from the message.
+ */
+function socketCode(message: string) {
+	if (/altnames/i.test(message)) return 'ERR_TLS_CERT_ALTNAME_INVALID'
+	if (/self[- ]signed/i.test(message)) return 'DEPTH_ZERO_SELF_SIGNED_CERT'
+	if (/certificate has expired/i.test(message)) return 'CERT_HAS_EXPIRED'
+	if (/ECONNREFUSED/.test(message)) return 'ECONNREFUSED'
+	if (/ENOTFOUND|getaddrinfo/.test(message)) return 'ENOTFOUND'
+	if (/ETIMEDOUT|timed? ?out/i.test(message)) return 'ETIMEDOUT'
+	return 'ESOCKET'
+}
+
 /** Turns an IMAP/SMTP error into something a person can act on. */
 export function describeConnectionError(err: unknown): string {
 	const e = err as {
@@ -92,15 +106,15 @@ export function describeConnectionError(err: unknown): string {
 		/auth|credentials|login|535|password/i.test(`${e?.responseText ?? ''} ${e?.response ?? ''} ${e?.message ?? ''}`)
 	)
 		return `Sign-in was rejected${e.responseText ? `: ${e.responseText}` : ''}. Check the username and password (some providers need an app password).`
-	switch (e?.code) {
+	switch (e?.code === 'ESOCKET' ? socketCode(e.message ?? '') : e?.code) {
 		case 'ENOTFOUND':
 		case 'EAI_AGAIN':
+		case 'EDNS':
 			return 'The server name could not be found. Check the host.'
 		case 'ECONNREFUSED':
 			return 'The server refused the connection. Check the port.'
 		case 'ETIMEDOUT':
 		case 'CONNECT_TIMEOUT':
-		case 'ESOCKET':
 			return 'The server did not answer in time. Check the host, port and security setting.'
 		case 'CERT_HAS_EXPIRED':
 			return 'The server certificate has expired.'
