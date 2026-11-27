@@ -3,7 +3,7 @@ import { ImapFlow } from 'imapflow'
 import nodemailer from 'nodemailer'
 import type { schema } from '../db'
 import { decryptSecret } from '../lib/crypto'
-import { log } from '../lib/log'
+import { log, safeJson } from '../lib/log'
 
 export type MailboxRow = typeof schema.mailboxes.$inferSelect
 
@@ -37,8 +37,10 @@ const imapLogger = (tag: string) => {
 	return {
 		debug: () => {},
 		info: () => {},
-		warn: (o: object) => l.warn('imap', { detail: JSON.stringify(o).slice(0, 500) }),
-		error: (o: object) => l.error('imap', { detail: JSON.stringify(o).slice(0, 500) }),
+		// imapflow logs the raw socket error. A TLS error holds the peer certificate, which can be circular,
+		// and a throw here (inside the socket's error handler) took the whole process down.
+		warn: (o: object) => l.warn('imap', { detail: safeJson(o).slice(0, 500) }),
+		error: (o: object) => l.error('imap', { detail: safeJson(o).slice(0, 500) }),
 	}
 }
 
@@ -102,8 +104,17 @@ export function describeConnectionError(err: unknown): string {
 			return 'The server did not answer in time. Check the host, port and security setting.'
 		case 'CERT_HAS_EXPIRED':
 			return 'The server certificate has expired.'
-		case 'ERR_TLS_CERT_ALTNAME_INVALID':
-			return 'The server certificate does not match this host name. Use the host name the certificate was issued for.'
+		case 'ERR_TLS_CERT_ALTNAME_INVALID': {
+			// "DNS:mail.example.com, DNS:*.example.com": say which names would work
+			const names = ((err as { cert?: { subjectaltname?: string } }).cert?.subjectaltname ?? '')
+				.split(',')
+				.map(n => n.trim().replace(/^(DNS|IP Address):/, ''))
+				.filter(Boolean)
+				.slice(0, 4)
+			return names.length
+				? `The server's certificate is for ${names.join(', ')}, not this host name. Use one of those as the host.`
+				: 'The server certificate does not match this host name. Use the host name the certificate was issued for.'
+		}
 		case 'DEPTH_ZERO_SELF_SIGNED_CERT':
 		case 'SELF_SIGNED_CERT_IN_CHAIN':
 			return 'The server uses a self-signed certificate.'
